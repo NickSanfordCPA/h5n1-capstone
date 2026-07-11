@@ -1,0 +1,43 @@
+# --- Secrets: never commit ---
+.env
+*.key
+*-key.json
+service-account*.json
+credentials*.json
+
+# --- Data: never commit data to the repo (lives in GCS / Postgres) ---
+data/
+raw/
+*.csv
+*.parquet
+*.xlsx
+*.zip
+
+# --- Reference materials (large, external, some copyrighted) ---
+Claude_Reference/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# --- Notebooks ---
+.ipynb_checkpoints/
+
+# --- Cloud SQL Auth Proxy binary ---
+cloud-sql-proxy
+cloud-sql-proxy.exe
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# NOTE: uv.lock IS committed for reproducibility — do not add it here.

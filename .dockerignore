@@ -1,0 +1,15 @@
+.git
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+Claude_Reference
+notebooks
+data
+raw
+.env
+*-key.json
+service-account*.json
+cloud-sql-proxy*
