@@ -39,5 +39,6 @@ cloud-sql-proxy.exe
 Thumbs.db
 .vscode/
 .idea/
+Visual Studio/
 
 # NOTE: uv.lock IS committed for reproducibility — do not add it here.
