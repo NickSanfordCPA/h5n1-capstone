@@ -11,23 +11,30 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 # 0. Variables — EDIT THESE
 # ---------------------------------------------------------------------------
-PROJECT_ID="h5n1-capstone"                    # must be globally unique; add a suffix if taken
-BILLING_ACCOUNT="XXXXXX-XXXXXX-XXXXXX"        # see: gcloud billing accounts list
+# NOTE: PROJECT_ID is the immutable project id, NOT the display name. The display
+# name is "h5n1-capstone"; the id was set when the project was created and cannot
+# be changed. Always use the id below in commands and connection strings.
+PROJECT_ID="harvard-capstone-499102"
+BILLING_ACCOUNT="016681-D7C2E5-526A9D"        # "Billing Account for Education"
 REGION="us-central1"
 DB_INSTANCE="h5n1-pg"
 DB_NAME="h5n1"
 DB_APP_USER="h5n1_app"
-RAW_BUCKET="gs://${PROJECT_ID}-raw"
-SOCIAL_BUCKET="gs://${PROJECT_ID}-social-restricted"
+# Bucket names are global and deliberately NOT derived from PROJECT_ID.
+# The raw/social split is a security boundary: social data is PII-restricted and
+# gets narrower IAM than raw source files. Do not collapse these into one bucket.
+RAW_BUCKET="gs://h5n1-raw"
+SOCIAL_BUCKET="gs://h5n1-social-restricted"
 SA_NAME="h5n1-jobs"                            # service account for non-human access
-TEAM_EMAILS=("waree@example.com" "max@example.com")   # their Google accounts
+TEAM_EMAILS=("sht310@g.harvard.edu" "wap185@g.harvard.edu")   # Max, Waree
 
 # ---------------------------------------------------------------------------
 # 2. Project, billing, budget, APIs
 # ---------------------------------------------------------------------------
-gcloud projects create "$PROJECT_ID"
+# ALREADY DONE — the project exists and billing is linked. Kept for the record:
+#   gcloud projects create "$PROJECT_ID"
+#   gcloud billing projects link "$PROJECT_ID" --billing-account="$BILLING_ACCOUNT"
 gcloud config set project "$PROJECT_ID"
-gcloud billing projects link "$PROJECT_ID" --billing-account="$BILLING_ACCOUNT"
 
 gcloud services enable \
   compute.googleapis.com \
@@ -36,11 +43,23 @@ gcloud services enable \
   secretmanager.googleapis.com \
   billingbudgets.googleapis.com
 
-# Budget with alert emails at 50/90/100% of $100/month. Adjust the amount.
+# Budget alerts at 50/90/100% of $40. Sized under the ~$49 of education credits so
+# the alert fires BEFORE they run out, not after. A budget only NOTIFIES — it does
+# not cap spend. Credits expire 2026-09-02 regardless; relink billing before then:
+#   gcloud billing projects link "$PROJECT_ID" --billing-account=<new-id>
+# --credit-types-treatment=exclude-all-credits IS LOAD-BEARING. The default is
+# INCLUDE_ALL_CREDITS, which measures spend NET of credits — on a fully-credited
+# account that reads $0 forever and the thresholds NEVER fire. Excluding credits
+# makes the budget track gross spend, which is what "how fast are we burning the
+# grant?" actually means.
+# Also needs --billing-project, else the call is attributed to a shared Google SDK
+# project and fails SERVICE_DISABLED even when the API is enabled on ours.
 gcloud billing budgets create \
   --billing-account="$BILLING_ACCOUNT" \
   --display-name="h5n1-monthly" \
-  --budget-amount=100USD \
+  --budget-amount=40USD \
+  --credit-types-treatment=exclude-all-credits \
+  --billing-project="$PROJECT_ID" \
   --threshold-rule=percent=0.5 \
   --threshold-rule=percent=0.9 \
   --threshold-rule=percent=1.0
@@ -48,9 +67,18 @@ gcloud billing budgets create \
 # ---------------------------------------------------------------------------
 # 3. IAM — teammates + a service account for jobs
 # ---------------------------------------------------------------------------
+# Least privilege: teammates get exactly what they need — connect to Cloud SQL and
+# read/write buckets. Deliberately NOT roles/editor, which would let them delete the
+# SQL instance and the buckets. Credits here are finite and non-replaceable, so an
+# accidental delete is expensive. Add roles later if someone is actually blocked.
 for EMAIL in "${TEAM_EMAILS[@]}"; do
   gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-    --member="user:${EMAIL}" --role="roles/editor"
+    --member="user:${EMAIL}" --role="roles/cloudsql.client"
+  gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="user:${EMAIL}" --role="roles/storage.objectAdmin"
+  # Lets them see the instance in the console / run `gcloud sql instances list`.
+  gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="user:${EMAIL}" --role="roles/cloudsql.viewer"
 done
 
 gcloud iam service-accounts create "$SA_NAME" \
@@ -72,21 +100,36 @@ gcloud storage buckets update "$RAW_BUCKET" --versioning
 # ---------------------------------------------------------------------------
 # 5. Cloud SQL Postgres
 # ---------------------------------------------------------------------------
-# NOTE: verify the tier + price for your region before creating. db-g1-small is a
-# low-cost shared-core option; if it's rejected, use a custom tier instead:
-#   --tier=db-custom-1-3840   (1 vCPU, 3.75 GB)
-# You can STOP the instance when idle to cut cost: gcloud sql instances patch $DB_INSTANCE --activation-policy=NEVER
+# --edition=ENTERPRISE IS REQUIRED AND MUST NOT BE DROPPED.
+# Cloud SQL defaults new Postgres instances to ENTERPRISE_PLUS, which rejects all
+# shared-core tiers and only accepts db-perf-optimized-N-* — hundreds of dollars a
+# month. Without this flag the create fails; worse, "fixing" it by switching to the
+# tier the error message suggests silently buys the expensive edition.
+# Note `gcloud sql tiers list` lists db-g1-small regardless of edition, so it is NOT
+# a reliable check for whether a tier is usable here.
+#
+# STOP the instance when idle to cut cost:
+#   gcloud sql instances patch $DB_INSTANCE --activation-policy=NEVER
+# and start it again with --activation-policy=ALWAYS
 gcloud sql instances create "$DB_INSTANCE" \
   --database-version=POSTGRES_16 \
   --region="$REGION" \
+  --edition=ENTERPRISE \
   --tier=db-g1-small \
   --storage-size=10GB \
   --storage-auto-increase
 
 gcloud sql databases create "$DB_NAME" --instance="$DB_INSTANCE"
 
-# App user — prompts for a password. Store it in the team password manager.
-gcloud sql users create "$DB_APP_USER" --instance="$DB_INSTANCE" --prompt-for-password
+# App user. NOTE: there is NO --prompt-for-password flag on `gcloud sql users
+# create` — only --password=PASSWORD. Typing it inline puts the secret in shell
+# history, so read it into a variable first. Store it in the team password manager;
+# roles/cloudsql.client gets teammates a connection, NOT credentials.
+#   bash:       read -rs -p "password: " PW && echo
+#   PowerShell: $sec = Read-Host "password" -AsSecureString
+#               $plain = [System.Net.NetworkCredential]::new("", $sec).Password
+gcloud sql users create "$DB_APP_USER" --instance="$DB_INSTANCE" --password="$PW"
+unset PW
 
 # The instance connection name (PROJECT:REGION:INSTANCE) — put this in .env as CLOUD_SQL_INSTANCE:
 gcloud sql instances describe "$DB_INSTANCE" --format="value(connectionName)"
