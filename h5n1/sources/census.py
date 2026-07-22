@@ -15,13 +15,15 @@ import zipfile
 import pandas as pd
 import requests
 
-# 2024 vintage = current official geography. NOTE: this reflects Connecticut's
-# nine planning regions (FIPS 091xx) that REPLACED its legacy eight counties in
-# 2022-24. Any source still using legacy CT county names won't match — that's a
-# known crosswalk fix-up downstream, not a seeding bug.
+# 2021 vintage, chosen deliberately to match our data sources. APHIS (the outbreak
+# DV) reports Connecticut by TRADITIONAL counties (New Haven, New London, ...), not
+# the nine planning regions (FIPS 091xx) that replaced them in the 2022+ Gazetteers.
+# 2021 gives traditional CT counties AND the current codes for older changes that
+# APHIS also uses (AK Kusilvak 02158, SD Oglala Lakota 46102, VA Bedford merge
+# 51019 — all pre-2016). So one vintage conforms the whole county master to the data.
 GAZETTEER_URL = (
     "https://www2.census.gov/geo/docs/maps-data/data/gazetteer/"
-    "2024_Gazetteer/2024_Gaz_counties_national.zip"
+    "2021_Gazetteer/2021_Gaz_counties_national.zip"
 )
 
 
