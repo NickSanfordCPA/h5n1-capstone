@@ -13,6 +13,7 @@ dependencies = [
     "requests>=2.32",
     "tenacity>=9.0",
     "holidays>=0.100",
+    "openpyxl>=3.1",
 ]
 
 [project.optional-dependencies]
