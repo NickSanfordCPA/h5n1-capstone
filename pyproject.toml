@@ -5,6 +5,7 @@ description = "Social-media early-warning signals for H5N1 avian influenza outbr
 requires-python = ">=3.12"
 dependencies = [
     "pandas>=2.2",
+    "numpy>=1.26",
     "pyarrow>=17.0",
     "sqlalchemy>=2.0",
     "psycopg[binary]>=3.2",

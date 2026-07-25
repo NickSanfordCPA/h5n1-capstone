@@ -558,6 +558,7 @@ source = { editable = "." }
 dependencies = [
     { name = "google-cloud-storage" },
     { name = "holidays" },
+    { name = "numpy" },
     { name = "openpyxl" },
     { name = "pandas" },
     { name = "psycopg", extra = ["binary"] },
@@ -585,6 +586,7 @@ requires-dist = [
     { name = "accelerate", marker = "extra == 'ml'", specifier = ">=0.34" },
     { name = "google-cloud-storage", specifier = ">=2.18" },
     { name = "holidays", specifier = ">=0.100" },
+    { name = "numpy", specifier = ">=1.26" },
     { name = "openpyxl", specifier = ">=3.1" },
     { name = "pandas", specifier = ">=2.2" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
