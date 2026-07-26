@@ -55,3 +55,33 @@ def counties_dataframe() -> pd.DataFrame:
     # 50 states + DC only; drop territories (state FIPS >= 60: AS/GU/MP/PR/VI).
     keep = out["fips"].str[:2].astype(int) < 60
     return out[keep].reset_index(drop=True)
+
+
+# 2020 Decennial Census, PL 94-171 redistricting file. P1_001N is the exact
+# enumerated total population as of April 1, 2020 — our static per-county human
+# denominator. Keyed to 2020 census geography, which still uses TRADITIONAL
+# Connecticut counties (09001-09015), matching dim_county's 2021 vintage rather
+# than the 091xx planning regions. Requires a free key (api.census.gov/data/key_signup.html).
+DECENNIAL_2020_PL_URL = "https://api.census.gov/data/2020/dec/pl"
+
+
+def county_population_2020(api_key: str) -> pd.DataFrame:
+    """2020 Decennial total population per county (50 states + DC): fips, population."""
+    resp = requests.get(
+        DECENNIAL_2020_PL_URL,
+        params={"get": "P1_001N", "for": "county:*", "key": api_key},
+        timeout=120,
+    )
+    resp.raise_for_status()
+    rows = resp.json()  # [[header...], [P1_001N, state, county], ...]
+    df = pd.DataFrame(rows[1:], columns=rows[0])
+
+    out = pd.DataFrame(
+        {
+            "fips": (df["state"] + df["county"]).str.zfill(5),
+            "population": pd.to_numeric(df["P1_001N"], errors="coerce").astype("Int64"),
+        }
+    )
+    # 50 states + DC only; drop territories (state FIPS >= 60), same as the county master.
+    keep = out["fips"].str[:2].astype(int) < 60
+    return out[keep].reset_index(drop=True)
