@@ -1,0 +1,9 @@
+{
+  "source": "USGS/USFWS North American Bird Banding Program (NABBP), 2025 data request",
+  "source_url": "https://www.sciencebase.gov/catalog/item/68837a85d4be027deba86316",
+  "capture_date": "2026-07-26",
+  "gcs_path": "gs://h5n1-raw/banding_recent_top_risk_species_clean.csv",
+  "sha256": "03a39e41c881c28458742dc3ef25b801374004ee028445deb640b44866b097e0",
+  "row_count": 2086793,
+  "notes": "Pre-filtered from the full ~13GB NABBP release (57 files, all species since the 1960s) down to the 9 species_id values in recommended_h5n1_high_risk_species.csv (Mallard, Canada Goose, Wood Duck, Large Canada Goose, Blue-winged Teal, Green-winged Teal, Northern Pintail, Lesser Snow Goose, Common Tern) and event_year >= 2018. This is the frozen input h5n1/sources/usgs_bird_banding.py reads; the full raw corpus was not archived since this project only ever uses this subset."
+}
