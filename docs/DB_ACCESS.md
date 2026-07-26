@@ -83,8 +83,9 @@ pd.read_sql("SELECT COUNT(*) FROM fact_h5n1_outbreak", get_engine())
 ```
 
 Always go through `h5n1.db.get_engine()` — it reads `.env`, so your port choice lives
-in one place and no code hardcodes it. Run inside the environment (`uv run jupyter lab`,
-or the Docker image) so the pinned deps are on the path.
+in one place and no code hardcodes it. Launch Jupyter **from the project environment**
+(`uv run --extra dev jupyter lab`, or the Docker image) so the kernel has `h5n1` and the
+pinned deps. Running a system-wide `jupyter` gives a kernel that can't `import h5n1`.
 
 ---
 
