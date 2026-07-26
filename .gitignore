@@ -41,4 +41,10 @@ Thumbs.db
 .idea/
 Visual Studio/
 
+# --- Claude Code ---
+# Per-developer tool permissions, written when you approve a command locally.
+# Personal and machine-specific, so it stays out of git. A SHARED .claude/settings.json
+# (no ".local") is deliberately NOT ignored — add one if the team ever wants a common baseline.
+.claude/settings.local.json
+
 # NOTE: uv.lock IS committed for reproducibility — do not add it here.
