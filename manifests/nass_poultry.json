@@ -1,0 +1,9 @@
+{
+  "source": "USDA NASS Census of Agriculture 2022, county-level poultry (Quick Stats bulk file)",
+  "source_url": "https://www.nass.usda.gov/datasets/qs.census2022.txt.gz",
+  "capture_date": "2026-07-27",
+  "gcs_path": "gs://h5n1-raw/nass_poultry/qs_census2022_county_poultry.tsv",
+  "sha256": "b25b1d555cd6ec4d0ff457c52c5f4d17efa16091e3229e4ae755529a89d48775",
+  "row_count": 119767,
+  "notes": "Stream-filtered from the 6,077,214-row Quick Stats 2022 Census bulk file down to AGG_LEVEL_DESC='COUNTY' AND GROUP_DESC='POULTRY'. Unlike the APHIS dashboards this is a plain static URL with no session handshake, so `python -m h5n1.sources.nass_poultry --acquire` reproduces this archive end to end. Only DOMAIN_DESC='TOTAL' rows are loaded; the INVENTORY and SALES domains re-cut the same totals by operation size and would double-count. Vintage checked: NASS 2022 reports Connecticut by traditional counties 09001-09015, not the 091xx planning regions, so it is 1:1 with the 2021-vintage dim_county. 3,052 county codes appear; the single orphan is 02010 'Aleutian Islands', a pre-1980 Alaska code NASS still uses for agricultural reporting, and it is dropped. Suppression measured on this file: operations counts 0% withheld, inventory/sales values 11-28% withheld as '(D)'."
+}
