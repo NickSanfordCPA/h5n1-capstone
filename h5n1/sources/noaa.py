@@ -7,8 +7,9 @@ county falls back to its 2nd/3rd-nearest when its closest station has a gap.
 
 Source: GHCN-Daily (Global Historical Climatology Network). Station observations
 in the annual by_year files; TMAX/TMIN in tenths of degrees C, PRCP in tenths of mm.
-humidity_pct is left NULL — GHCN-Daily does not carry relative humidity at this
-resolution (a reanalysis product would be needed).
+There is no humidity column: GHCN-Daily does not carry relative humidity at this
+resolution, so fact_weather.humidity_pct was 100% NULL and sql/009_weather_lag.sql
+dropped it. Real humidity would require a reanalysis product (ERA5) as a new source.
 
     python -m h5n1.sources.noaa 2020 2026     # load a year range into fact_weather
 
@@ -36,8 +37,8 @@ K_NEAREST = 5  # stations ranked per county; gaps fall through to the next-neare
 
 WEATHER_UPSERT = text(
     """
-    INSERT INTO fact_weather (fips, day, temp_min_c, temp_max_c, precip_mm, humidity_pct)
-    VALUES (:fips, :day, :temp_min_c, :temp_max_c, :precip_mm, NULL)
+    INSERT INTO fact_weather (fips, day, temp_min_c, temp_max_c, precip_mm)
+    VALUES (:fips, :day, :temp_min_c, :temp_max_c, :precip_mm)
     ON CONFLICT (fips, day) DO UPDATE SET
         temp_min_c = EXCLUDED.temp_min_c,
         temp_max_c = EXCLUDED.temp_max_c,

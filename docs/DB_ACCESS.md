@@ -219,6 +219,42 @@ command; connect with your email as the user and any/empty password.
 
 ---
 
+## Instance settings the feature builds depend on
+
+These are **live instance configuration, not in the repo**, so a rebuild from scratch on
+a fresh instance will fail without them. Both were set on 2026-07-27.
+
+| Setting | Default | Ours | Why |
+|---|---|---|---|
+| `temp_file_limit` | 1 GB | **8 GB** | `sql/011_model_county_day.sql` **cannot build under the default.** It joins a 7.5M-row grid against `fact_weather` (7.4M rows), `feature_spatial_lag` (3.4M) and `feature_migration_pressure` (2.2M); the hash tables spill and blow past 1 GB. Cloud SQL's default is sized for OLTP, not for an analytical build. |
+| `work_mem` | 4 MB | 4 MB (per-session override) | Left at the default globally. Each migration sets `SET LOCAL work_mem = '64MB'` itself — transaction-scoped, so it reverts on commit and never leaks into anyone else's session. |
+
+Raising the temp limit (already done — recorded here so it can be reproduced):
+
+```bash
+# --database-flags REPLACES the whole set. cloudsql.iam_authentication MUST be
+# restated or IAM database auth is silently switched off.
+gcloud sql instances patch h5n1-pg --project harvard-capstone-499102 \
+  --database-flags=cloudsql.iam_authentication=on,temp_file_limit=8388608   # value in kB
+```
+
+This did **not** restart the instance — live connections survived. Verify with
+`SHOW temp_file_limit;` (expect `8GB`).
+
+⚠️ **`temp_file_limit` is superuser-only**, so `h5n1_app` cannot raise it in-session. If
+you hit the limit, it has to be fixed with the `gcloud` patch above, not from SQL.
+
+**Refreshing the feature views** — order matters, and the `work_mem` bump is not optional:
+
+```sql
+SET work_mem = '64MB';
+REFRESH MATERIALIZED VIEW feature_spatial_lag;   -- 008, ~8 min
+REFRESH MATERIALIZED VIEW feature_weather_lag;   -- 009, ~1 min
+REFRESH MATERIALIZED VIEW feature_county_day;    -- 011, ~14 min
+```
+
+---
+
 ## Troubleshooting
 
 | Symptom | Cause |
@@ -228,3 +264,5 @@ command; connect with your email as the user and any/empty password.
 | Colab: `403 ... cloudsql.instances.connect` | Colab signed into the wrong Google account. Use the `@g.harvard.edu` with `cloudsql.client`. |
 | `password authentication failed for user "h5n1_app"` | Tunnel is fine; wrong DB password. Re-check the password manager. |
 | `KeyError: 'DB_USER'` (or similar) | `.env` not filled in / not loaded. Copy from `.env.example`. |
+| `temporary file size exceeds "temp_file_limit"` | Instance flag is back at the 1 GB default, **or** you refreshed a feature view without `SET work_mem = '64MB'` first. See [Instance settings](#instance-settings-the-feature-builds-depend-on). |
+| `incomplete placeholder: '%'` running migrations | A literal `%` somewhere in the `.sql` file — **comments included**. `sql/run_migrations.py` passes files through psycopg's placeholder parser. Double it to `%%`. |
