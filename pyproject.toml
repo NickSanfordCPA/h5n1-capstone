@@ -26,11 +26,20 @@ ml = [
     "sentencepiece>=0.2",
     "accelerate>=0.34",
 ]
+# Classical modeling stack — regression baselines on feature_county_day. Separate
+# from `ml` (which is the heavy torch/transformers stack for the sentiment phase)
+# so the ingestion image stays lean. Install with: uv sync --extra modeling
+modeling = [
+    "scikit-learn>=1.5",
+    "statsmodels>=0.14",
+    "matplotlib>=3.9",
+]
 dev = [
     "ruff>=0.6",
     "pytest>=8.0",
     "jupyterlab>=4.2",
     "ipykernel>=6.29",
+    "nbconvert>=7.16",
 ]
 
 [build-system]
