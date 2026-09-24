@@ -1,0 +1,31 @@
+{
+  "source": "GDELT GKG 2.0 via BigQuery public table gdelt-bq.gdeltv2.gkg_partitioned",
+  "source_url": "https://blog.gdeltproject.org/gdelt-2-0-our-global-world-in-realtime/",
+  "notes": "Filter: V2Themes contains any of TAX_DISEASE_BIRD_FLU, TAX_DISEASE_AVIAN_FLU, TAX_DISEASE_AVIAN_INFLUENZA, TAX_DISEASE_POULTRY_DISEASES (there is no H5N1 theme) AND V2Locations has a US location. Day key = DATE (processing batch), not _PARTITIONTIME (ingestion). Staging tables live in BQ dataset harvard-capstone-499102.gdelt_stage (US multi-region); query text is reproducible from h5n1/sources/gdelt.py and pinned by query_sha256.",
+  "tables": {
+    "gkg_avian_us": {
+      "bq_table": "harvard-capstone-499102.gdelt_stage.gkg_avian_us",
+      "gcs_prefix": "gs://h5n1-raw/gdelt/gkg_avian_us/20260924T180945Z/",
+      "row_count": 169954,
+      "bytes_processed": 939569466284,
+      "bytes_billed": 939570233344,
+      "job_id": "79c19d97-5675-4c9e-9560-6a02aeb2c4eb",
+      "query_sha256": "f9202e1562b2695446c79a48f89122a0ffa398b8fb0851747822ae42805e57aa",
+      "capture_date": "2026-09-24",
+      "start": "2022-01-01",
+      "end": "2026-07-21"
+    },
+    "gkg_us_denominator": {
+      "bq_table": "harvard-capstone-499102.gdelt_stage.gkg_us_denominator",
+      "gcs_prefix": "gs://h5n1-raw/gdelt/gkg_us_denominator/20260924T181035Z/",
+      "row_count": 87453,
+      "bytes_processed": 235659915327,
+      "bytes_billed": 235660115968,
+      "job_id": "14d256d9-e189-49a1-b9a9-ae7582a94bd2",
+      "query_sha256": "38c85e313f6a403a3dd771384d719a094c8d80733f4ad58671fcef4c789bce7c",
+      "capture_date": "2026-09-24",
+      "start": "2022-01-01",
+      "end": "2026-07-21"
+    }
+  }
+}
