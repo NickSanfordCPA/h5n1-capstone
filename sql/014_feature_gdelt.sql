@@ -14,9 +14,9 @@
 -- CONVENTIONS (same as 011; do not "simplify" them away)
 --   * PAST-ONLY windows [day-w, day-1], w in {7, 21}. A published article is a reported
 --     event, like a detection. The weather exception (inclusive of today) does NOT apply.
---   * Counts coalesce to 0, but only INSIDE GDELT coverage. Before coverage start + w, or
---     after coverage end + 1, every column is NULL: the source didn't exist there, which
---     is not the same as no news.
+--   * Counts coalesce to 0, but only INSIDE GDELT coverage. Before coverage start + w,
+--     after coverage end + 1, or when the window touches a GDELT outage day, every
+--     column is NULL: the source didn't exist there, which is not the same as no news.
 --   * Tone is a MEASUREMENT: NULL when there are no stories to measure.
 --   * Rates are per 10,000 articles in the matching denominator; NULL when it is 0.
 --   * State features: any type-2 OR type-3 location in the state, broadcast to every
@@ -43,6 +43,24 @@ coverage AS (
     SELECT MIN(day) AS lo, MAX(day) AS hi
     FROM fact_gdelt_denominator
     WHERE state = 'US'
+),
+
+-- GDELT OUTAGES. GKG has whole days with no records at all -- 2025-06-15..2025-07-01
+-- (17 days) inside the test window. A window touching one is not "no news", it is no
+-- source: every column goes NULL, exactly as outside coverage. A day counts as missing
+-- when it has no national denominator row.
+gap AS (
+    SELECT d.day, (dn.day IS NULL)::int AS missing
+    FROM dim_date d
+    CROSS JOIN coverage c
+    LEFT JOIN fact_gdelt_denominator dn ON dn.day = d.day AND dn.state = 'US'
+    WHERE d.day BETWEEN c.lo AND c.hi + 1
+),
+gap_win AS (
+    SELECT day,
+           SUM(missing) OVER (ORDER BY day ROWS BETWEEN 7  PRECEDING AND 1 PRECEDING) AS m7,
+           SUM(missing) OVER (ORDER BY day ROWS BETWEEN 21 PRECEDING AND 1 PRECEDING) AS m21
+    FROM gap
 ),
 
 -- Same horizon as 011, so the two views line up row for row.
@@ -181,9 +199,10 @@ SELECT
 
 FROM grid g
 CROSS JOIN coverage c
+LEFT JOIN gap_win gw ON gw.day = g.day
 CROSS JOIN LATERAL (
-    SELECT g.day BETWEEN c.lo + 7  AND c.hi + 1 AS v7,
-           g.day BETWEEN c.lo + 21 AND c.hi + 1 AS v21
+    SELECT g.day BETWEEN c.lo + 7  AND c.hi + 1 AND gw.m7  = 0 AS v7,
+           g.day BETWEEN c.lo + 21 AND c.hi + 1 AND gw.m21 = 0 AS v21
 ) cov
 LEFT JOIN state_win  sw ON sw.state = g.state AND sw.day = g.day
 LEFT JOIN county_win cw ON cw.fips  = g.fips  AND cw.day = g.day
