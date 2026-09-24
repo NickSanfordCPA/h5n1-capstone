@@ -23,6 +23,15 @@
 --     county in the state. County features: type-3 (city) point-in-polygon ONLY.
 --   * Tone and negative share are computed over distinct STORIES (syndication_key), so
 --     one AP piece reprinted 200 times is weighted once.
+--
+-- TODO -- REMOVE MEDIA HUBS FROM THE COUNTY LAYER (not yet done). City geocodes pick up
+--   datelines and institutions, not only where something happened. DC (11001) carries
+--   30,558 articles -- 6x the next county -- because "White House" / "Washington" tag
+--   federal-policy stories; Cook (17031), Los Angeles (06037), San Francisco (06075)
+--   and similar metros are inflated the same way. Planned fix: exclude a hub list from
+--   county_daily (keeping the state credit), chosen by a rule rather than by eye --
+--   e.g. counties whose article share far exceeds their share of poultry operations
+--   and outbreaks. Re-run the lift comparison with and without the exclusion.
 
 SET LOCAL work_mem = '64MB';
 
