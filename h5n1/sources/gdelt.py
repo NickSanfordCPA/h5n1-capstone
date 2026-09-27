@@ -25,6 +25,8 @@ the partition bound only exists to prune.
     uv run python -m h5n1.sources.gdelt extract --yes           # billed; -> BQ staging -> GCS
     uv run python -m h5n1.sources.gdelt denominator --yes       # billed; -> BQ staging -> GCS
     uv run python -m h5n1.sources.gdelt load                    # GCS parquet -> Postgres
+    uv run python -m h5n1.sources.gdelt gcam --yes --ceiling-tb 5.2   # billed, ~4.9 TB
+    uv run python -m h5n1.sources.gdelt load-gcam               # -> fact_gdelt_gcam
 
 GEOGRAPHY -- the hazardous part. V2Locations type codes: 1 country, 2 US state,
 3 US city, 4 world city, 5 world state. A type-2 location is geocoded to the STATE
@@ -92,6 +94,18 @@ TONE_FIELDS = (
 )
 US_LOC_TYPES = {1, 2, 3}
 
+GCAM_TABLE = "gkg_avian_gcam"
+# PRE-REGISTERED in docs/gcam_preregistration.md, before any GCAM value was pulled.
+# Do not add dimensions here for a claim; the full GCAM string stays in staging only
+# for reproducibility.
+GCAM_DIMS = {
+    "gcam_anxiety": "c5.33",       # LIWC Anxiety
+    "gcam_tentative": "c5.26",     # LIWC Tentative
+    "gcam_death": "c5.2",          # LIWC Death
+    "gcam_uncertainty": "c6.6",    # Loughran-McDonald Uncertainty
+    "gcam_negative": "c3.1",       # Lexicoder Sentiment NEGATIVE
+}
+
 
 # ---------------------------------------------------------------------------
 # Pure parsing -- unit tested, no I/O
@@ -150,6 +164,35 @@ def parse_locations(v2_locations: str | None) -> list[dict]:
             "lon": lon,
             "feature_id": f[7] or None,
         })
+    return out
+
+
+def parse_gcam(gcam: str | None) -> dict:
+    """GCAM "wc:412,c1.1:3,...,v10.1:0.23" -> wc plus the pre-registered counts.
+
+    GCAM lists only dimensions with at least one match, so a missing dimension on a
+    record that HAS a word count is a real 0. With no GCAM or wc <= 0 there is nothing
+    to measure: everything is None, not 0."""
+    out = {"gcam_wc": None, **dict.fromkeys(GCAM_DIMS)}
+    if not gcam:
+        return out
+    kv = {}
+    for item in gcam.split(","):
+        k, sep, v = item.partition(":")
+        if sep:
+            kv[k.strip()] = v.strip()
+    try:
+        wc = int(float(kv["wc"]))
+    except (KeyError, ValueError):
+        return out
+    if wc <= 0:
+        return out
+    out["gcam_wc"] = wc
+    for name, var in GCAM_DIMS.items():
+        try:
+            out[name] = int(float(kv.get(var, 0)))
+        except ValueError:
+            out[name] = None
     return out
 
 
@@ -293,6 +336,22 @@ FROM (
 ), UNNEST(keys) AS key
 WHERE day BETWEEN '{start.isoformat()}' AND '{end.isoformat()}'
 GROUP BY day, state
+"""
+
+
+def gcam_sql(start: dt.date, end: dt.date) -> str:
+    """GCAM for the articles already staged by `extract`. Joining on the staged record
+    IDs bills only GKGRECORDID + GCAM (~4.9 TB for 2022-01..2026-07), not a re-scan of
+    V2Themes/V2Locations. The full GCAM string is kept so the staging copy is complete;
+    only the pre-registered dimensions are loaded to Postgres."""
+    ids = f"{PROJECT}.{STAGE_DATASET}.{ARTICLE_TABLE}"
+    return f"""
+SELECT k.GKGRECORDID AS gkg_record_id, ANY_VALUE(k.GCAM) AS gcam
+FROM `{GKG}` k
+JOIN (SELECT DISTINCT gkg_record_id FROM `{ids}`) a
+  ON k.GKGRECORDID = a.gkg_record_id
+WHERE {_partition_where(start, end).replace('_PARTITIONTIME', 'k._PARTITIONTIME')}
+GROUP BY k.GKGRECORDID
 """
 
 
@@ -581,6 +640,52 @@ def load() -> None:
     print("done. Next: uv run python sql/rebuild_model_county_day.py --variant gdelt")
 
 
+GCAM_COLS = ["gkg_record_id", "gcam_wc", *GCAM_DIMS]
+
+
+def load_gcam() -> None:
+    """GCAM staging parquet -> fact_gdelt_gcam (pre-registered dimensions only)."""
+    from h5n1.db import get_engine
+
+    tables = json.loads(MANIFEST.read_text())["tables"]
+    if GCAM_TABLE not in tables:
+        raise SystemExit("no GCAM staging in manifest -- run `gcam --yes` first")
+    raw = _read_parquet_prefix(tables[GCAM_TABLE]["gcs_prefix"])
+    if len(raw) != tables[GCAM_TABLE]["row_count"]:
+        raise RuntimeError(f"GCAM parquet has {len(raw):,} rows, manifest says "
+                           f"{tables[GCAM_TABLE]['row_count']:,}")
+    parsed = pd.DataFrame([parse_gcam(s) for s in raw["gcam"]], index=raw.index)
+    g = pd.concat([raw[["gkg_record_id"]], parsed], axis=1)
+
+    engine = get_engine()
+    known = set(pd.read_sql("SELECT gkg_record_id FROM fact_gdelt_article", engine)
+                ["gkg_record_id"])
+    orphan = ~g["gkg_record_id"].isin(known)
+    if orphan.any():
+        raise RuntimeError(f"{int(orphan.sum())} GCAM rows have no fact_gdelt_article parent")
+    missing = len(known) - len(g)
+    translingual = g["gkg_record_id"].str.contains("-T").mean()
+    print(f"  GCAM rows {len(g):,}; articles without a GCAM row {missing:,}; "
+          f"no usable wc {g['gcam_wc'].isna().sum():,}; translingual (-T) share "
+          f"{translingual:.2%}")
+    print("  share of scored articles with count > 0: " + ", ".join(
+        f"{c} {(g.loc[g.gcam_wc.notna(), c] > 0).mean():.1%}" for c in GCAM_DIMS))
+    # Integer columns with NULLs arrive as float; COPY wants "3", not "3.0".
+    for c in GCAM_COLS[1:]:
+        g[c] = g[c].astype("Int64")
+
+    raw_conn = engine.raw_connection()
+    try:
+        cur = raw_conn.cursor()
+        _copy_upsert(cur, g, "fact_gdelt_gcam", GCAM_COLS, ["gkg_record_id"])
+        raw_conn.commit()
+    except Exception:
+        raw_conn.rollback()
+        raise
+    finally:
+        raw_conn.close()
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -588,7 +693,8 @@ def load() -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=["dry-run", "extract", "denominator", "load"])
+    ap.add_argument("cmd", choices=["dry-run", "extract", "denominator", "gcam", "load",
+                                    "load-gcam"])
     ap.add_argument("--start", type=dt.date.fromisoformat, default=DEFAULT_START)
     ap.add_argument("--end", type=dt.date.fromisoformat, default=DEFAULT_END)
     ap.add_argument("--ceiling-tb", type=float, default=CEILING_BYTES / 1e12)
@@ -600,11 +706,15 @@ def main() -> None:
     if args.cmd == "load":
         load()
         return
+    if args.cmd == "load-gcam":
+        load_gcam()
+        return
 
     client = _bq()
     queries = {
         "extract": (ARTICLE_TABLE, extract_sql(args.start, args.end)),
         "denominator": (DENOM_TABLE, denominator_sql(args.start, args.end)),
+        "gcam": (GCAM_TABLE, gcam_sql(args.start, args.end)),
     }
     if args.cmd == "dry-run" or not args.yes:
         for name, (_, sql) in queries.items():

@@ -126,3 +126,19 @@ def test_theme_regex_needs_exact_theme():
     rx = re.compile(gdelt.THEME_RE)
     assert rx.search("TAX_DISEASE_BIRD_FLU,123;")
     assert not rx.search("TAX_DISEASE_BIRD_FLU_SOMETHING,123;")
+
+
+def test_parse_gcam():
+    g = gdelt.parse_gcam("wc:412,c1.1:3,c3.1:7,c5.2:2,c5.33:1,v10.1:0.23")
+    assert g["gcam_wc"] == 412
+    assert g["gcam_negative"] == 7 and g["gcam_death"] == 2 and g["gcam_anxiety"] == 1
+    # Absent dimension on a scored article is a real zero, not unknown.
+    assert g["gcam_uncertainty"] == 0 and g["gcam_tentative"] == 0
+    # c5.2 must not match c5.26 or c5.21 (exact keys, not prefixes).
+    assert gdelt.parse_gcam("wc:10,c5.26:4")["gcam_death"] == 0
+    assert gdelt.parse_gcam("wc:10,c5.26:4")["gcam_tentative"] == 4
+
+
+def test_parse_gcam_unmeasured_is_null():
+    for s in (None, "", "c5.33:1", "wc:0,c5.33:1", "wc:x"):
+        assert all(v is None for v in gdelt.parse_gcam(s).values()), s

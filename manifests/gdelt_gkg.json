@@ -26,6 +26,18 @@
       "capture_date": "2026-09-24",
       "start": "2022-01-01",
       "end": "2026-07-21"
+    },
+    "gkg_avian_gcam": {
+      "bq_table": "harvard-capstone-499102.gdelt_stage.gkg_avian_gcam",
+      "gcs_prefix": "gs://h5n1-raw/gdelt/gkg_avian_gcam/20260927T214921Z/",
+      "row_count": 169953,
+      "bytes_processed": 4859343916894,
+      "bytes_billed": 4859344453632,
+      "job_id": "7209b252-e34d-4dde-85fd-c509a22a7145",
+      "query_sha256": "2eef613b4b165092fed218da1831c6f72759461b772bc90fb5b9186bd0352dda",
+      "capture_date": "2026-09-27",
+      "start": "2022-01-01",
+      "end": "2026-07-21"
     }
   }
 }
