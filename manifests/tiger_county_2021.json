@@ -1,0 +1,8 @@
+{
+  "source": "Census 2021 cartographic boundary file, counties, 1:500k",
+  "source_url": "https://www2.census.gov/geo/tiger/GENZ2021/shp/cb_2021_us_county_500k.zip",
+  "capture_date": "2026-09-24",
+  "gcs_path": "gs://h5n1-raw/tiger/cb_2021_us_county_500k.zip",
+  "sha256": "0262e163a6b2effa8e73863912814d499f6bdd07a05726960e0f4135ca62df1e",
+  "notes": "Used for GDELT US-city point-in-polygon. 2021 vintage to match dim_county: legacy Connecticut counties 09001-09015, not 091xx."
+}
