@@ -15,6 +15,8 @@ dependencies = [
     "tenacity>=9.0",
     "holidays>=0.100",
     "openpyxl>=3.1",
+    "google-cloud-bigquery>=3.25",
+    "geopandas>=1.0",
 ]
 
 [project.optional-dependencies]
