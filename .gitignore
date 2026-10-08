@@ -47,4 +47,7 @@ Visual Studio/
 # (no ".local") is deliberately NOT ignored — add one if the team ever wants a common baseline.
 .claude/settings.local.json
 
+# Local scratch notes — not committed to the repo.
+CLAUDE.md
+
 # NOTE: uv.lock IS committed for reproducibility — do not add it here.
