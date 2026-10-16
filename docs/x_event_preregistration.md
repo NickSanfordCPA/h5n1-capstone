@@ -84,8 +84,19 @@ change of scraper. The registered forest test therefore cannot support a claim e
   test period.
 - **Account labels:** existing labels are kept. New test-period authors that need an LLM label
   (step 2) are labelled by subagents using Appendix A.
-- **Sentiment** stays the registered fp32 TweetEval model (step 5). `x_post_sentiment` is not
-  used anywhere in this test.
+- **Sentiment changes model** (replaces step 5 and the TweetEval row of Frozen inputs):
+  - Model: `cardiffnlp/twitter-xlm-roberta-base-sentiment`, fp32, the model Waree's
+    `x_post_sentiment` uses. One multilingual model scores English and Spanish on the same
+    scale, and the team uses one sentiment definition throughout.
+  - Preprocessing: line breaks → a space, then the Cardiff convention (user handles →
+    `@user`, links → `http`), as `h5n1/sentiment/core.preprocess`.
+  - Truncation at 512 tokens.
+  - Scored on the filtered subset (step 4), in **both** periods. The training subset is
+    re-scored, so `sentiment_subset.parquet` (TweetEval) is no longer a frozen input.
+  - Score = p_pos − p_neg, as before. `x_sent_7d` is unchanged otherwise.
+  - The `x_post_sentiment` values themselves are not used, because their preprocessing
+    differs. The run records the model file's SHA-256 and Hugging Face revision; the same
+    file scores both periods.
 
 **2. Primary test: an out-of-sample replication of the event study.** It replaces the
 forest's six comparisons as the claim-bearing test. It compares outbreak *rates* after a
@@ -137,7 +148,6 @@ claim.
 |---|---|
 | `labels/illness_posts_screened.parquet` | `772f3cba…b9b0c9` |
 | `topic_subset.parquet` | `29531f40…85e27e` |
-| `sentiment_subset.parquet` | `9c9f5855…d93e32` |
 | `authors.parquet` | `b72bc951…01dc68` |
 | `local_observation.parquet` | `42089ab9…acd51c` |
 
@@ -149,6 +159,10 @@ switching is the collection seam, which was found from post counts and not from 
 But the choice of replacement was made knowing the exploratory results, and readers should
 weigh it that way. The exploratory p = .023 does not survive the 12 tests run at the time, so
 the replication is the first real test of that lead.
+
+The sentiment model also changes after exploration, from TweetEval to XLM-R. All exploratory
+sentiment results used TweetEval, so they say nothing about how XLM-R will behave; the switch
+was made for consistency across languages and the team, not from any XLM-R result.
 
 ## Question
 
