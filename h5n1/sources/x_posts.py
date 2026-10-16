@@ -1,14 +1,22 @@
-"""X (Twitter) keyword-search CSVs -> deduplicated, geocoded, flagged post and author tables.
+"""X (Twitter) keyword-search posts -> deduplicated, geocoded, flagged post and author tables.
 
-EXPLORATORY, LOCAL ONLY. Input is the prior cohort's scraper export (one CSV per search
-term, data/X/*.csv); Muthu is re-pulling with better terms, and this module is meant to
-run unchanged on that pull. Outputs are parquet under data/X_derived/ (gitignored) --
-nothing goes to GCS or Postgres until the repull lands and the design is settled.
+LOCAL ONLY. Outputs are parquet under data/X_derived/ (gitignored); nothing goes to GCS or
+Postgres. Three STREAMS, each with its own output directory (Amendment 1 of
+docs/x_event_preregistration.md):
 
-    uv run python -m h5n1.sources.x_posts build          # posts.parquet, authors.parquet
-    uv run python -m h5n1.sources.x_posts accounts       # account_type + hub -> authors.parquet
-    uv run python -m h5n1.sources.x_posts subset         # topic_subset.parquet
-    uv run --extra ml python -m h5n1.sources.x_posts sentiment [--universe all]  # resumable
+  prior    the prior cohort's scraper export, one CSV per search term (data/X/*.csv),
+           2022-06..2024-12 -> data/X_derived/. FROZEN: these are the training-period files
+           the amendment reuses and hashes; rebuild them only with --out pointed elsewhere.
+  en_test  x_post_unique, corpus twitterapi_en, originals + replies from 2025-01-01
+           -> data/X_derived/test_2025/
+  es       x_post_unique, corpus twitterapi_es, originals + replies from 2022-06-01
+           -> data/X_derived/es/
+
+    uv run python -m h5n1.sources.x_posts build    [--stream S]   # posts.parquet, authors.parquet
+    uv run python -m h5n1.sources.x_posts biobatch  --stream S    # bios needing an LLM label
+    uv run python -m h5n1.sources.x_posts accounts [--stream S]   # account_type + hub -> authors.parquet
+    uv run python -m h5n1.sources.x_posts subset   [--stream S]   # topic_subset.parquet
+    uv run --extra ml python -m h5n1.sources.x_posts sentiment [--stream S] [--model xlmr|tweeteval]
 
 GRAIN. Geography is the author's profile location (see x_location): STATE is the modeling
 grain. A post found by several search terms is one post; `terms` keeps them all.
@@ -16,28 +24,34 @@ grain. A post found by several search terms is one post; `terms` keeps them all.
 WHAT IS FLAGGED, NOT DROPPED (the filters are applied downstream, so each is auditable):
   copypasta   the post's normalized 80-char prefix is shared by >= COPYPASTA_MIN posts
               from >= 2 authors -- coordinated campaigns and templated bots. The earliest
-              post of each group is kept as the representative (copypasta_first).
-  train-window author volume, from which the hub rule is applied once account types exist.
+              post of each group is kept as the representative (copypasta_first). Flagged
+              within each stream.
+  hub-window author volume, from which the hub rule is applied once account types exist.
 
 ACCOUNT TYPE (step `accounts`). Four groups: farmer_keeper, ag_institution, media_aggregator,
 general_public. Authors whose bio has a farm/ag/animal-health term, plus every top-1% author,
-were classified by an LLM reading the bio in-session (labels/bio_labels_*.csv; no API). Every
-other author gets a regex fallback: media_aggregator if the bio has a strong news term, else
-general_public.
+are classified by an LLM reading the bio in-session (labels/bio_labels_*.csv; no API; step
+`biobatch` writes what needs labelling). Every other author gets a regex fallback:
+media_aggregator if the bio has a strong news term, else general_public. Labels from the
+prior stream carry over to every stream.
 
 HUB RULE -- fixed 2026-09-28, BEFORE any X feature was built or scored, mirroring the GDELT
-media-hub rule (top 1% by train-window volume AND no local stake):
-  hub = train-window post count in the top 1% of authors
+media-hub rule (top 1% by hub-window volume AND no local stake):
+  hub = hub-window post count in the top 1% of the stream's authors
         AND account_type NOT IN (farmer_keeper, ag_institution)
-Hubs are dropped from every signal feature. Media accounts below the volume cut are kept as
-their own stream (local outlets relaying a local story may carry signal); they are not
-pooled with the public.
+The hub window is pre-2025 for prior and es. en_test has no pre-2025 posts (the corpus
+changes on 2025-01-01), so its window is all of its posts, and a prior-stream hub stays a hub
+(Amendment 1, item 1). Hubs are dropped from every signal feature. Media accounts below the
+volume cut are kept as their own stream (local outlets relaying a local story may carry
+signal); they are not pooled with the public.
 
 TOPIC SUBSET (step `subset`): state-geocoded, not a hub, and not a non-first copypasta post.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import pathlib
 import re
 
@@ -47,11 +61,37 @@ from h5n1.sources.x_location import geocode_series
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 RAW_DIR = ROOT / "data" / "X"
-OUT_DIR = ROOT / "data" / "X_derived"
+XD = ROOT / "data" / "X_derived"
 TRAIN_END = pd.Timestamp("2025-01-01", tz="UTC")  # SPLIT in regression_baseline / gdelt_lift
 COPYPASTA_MIN = 5
 KEEP = ["_id", "userId", "userName", "alias", "bio", "followers", "verified", "userLocation", "lang",
         "type", "text", "createdAt", "totalRetweets", "favorites", "replies", "impressions", "url"]
+STREAMS = {
+    "prior": {"out": XD, "corpus": None, "start": None, "hub_pre2025": True},
+    "en_test": {"out": XD / "test_2025", "corpus": "twitterapi_en", "start": "2025-01-01", "hub_pre2025": False},
+    "es": {"out": XD / "es", "corpus": "twitterapi_es", "start": "2022-06-01", "hub_pre2025": True},
+}
+OUT_DIR = XD  # set from --stream / --out in __main__
+
+# Spanish-only geography filter (Amendment 1, item 5): a profile naming another
+# Spanish-speaking country, or Baja California, is not a US location -- the geocoder reads
+# "Bogota, D.C., Colombia" as DC and "Tijuana, Baja California" as CA.
+ES_FOREIGN = re.compile(
+    r"\b(?:argentina|bolivia|chile|colombia|costa rica|cuba|ecuador|el salvador|espa[ñn]a|spain|"
+    r"guatemala|guinea ecuatorial|equatorial guinea|honduras|m[ée]xico|mexico|nicaragua|panam[áa]|"
+    r"paraguay|per[úu]|peru|rep[úu]blica dominicana|dominican republic|uruguay|venezuela|"
+    r"baja california)\b", re.I)
+
+# bios that go to the LLM labeller (recovered verbatim from the 2026-09-28 prior-stream run)
+FARM = (r"\b(farm\w*|ranch\w*|cattle\w*|cowboy|cowgirl|dairy\w*|poultry|broiler\w*|egg|eggs|turkey|turkeys|"
+        r"grower|homestead\w*|chicken\w*|hens?|flock|coop|ducks?|goats?|sheep|livestock|4-h|ffa|agvocate|ag|"
+        r"agri\w*|agronom\w*|crops?|harvest|tractor\w*|hog|swine|pork|beef)\b")
+INST = (r"\b(extension|veterinar\w*|vet|dvm|animal health|usda|aphis|department of agriculture|dept of ag|"
+        r"farm bureau)\b")
+# Spanish equivalents, used only for the es stream
+FARM_ES = (r"\b(granj\w*|ganad\w*|rancho\w*|ranchero\w*|av[íi]col\w*|avicult\w*|gallin\w*|pollo\w*|"
+           r"aves de corral|huevos?|lecher\w*|campesin\w*|agricult\w*|agropecuari\w*|agr[óo]nom\w*|"
+           r"cosecha\w*|cerdos?|porcin\w*|veterinari\w*|senasa|sagarpa|sader)\b")
 
 
 def _term(path: pathlib.Path) -> str:
@@ -71,11 +111,41 @@ def load_raw() -> pd.DataFrame:
     return raw[~bad]
 
 
-def build() -> None:
-    raw = load_raw()
-    terms = raw.groupby("_id").term.agg(lambda t: "|".join(sorted(set(t))))
+def load_db(corpus: str, start: str) -> pd.DataFrame:
+    """x_post_unique rows for one twitterapi corpus, renamed to the CSV export's columns.
+    Originals and replies only: the prior cohort has no quote posts (Amendment 1, item 1)."""
+    from h5n1.db import get_engine
+
+    sql = f"""
+        SELECT post_id AS "_id", user_id AS "userId", user_name AS "userName", alias,
+               coalesce(raw->'author'->'profile_bio'->>'description', '') AS bio,
+               followers::text AS followers, verified::text AS verified,
+               coalesce(user_location, '') AS "userLocation", lang, post_type AS type,
+               post_text AS text, created_at AS ts, retweets::text AS "totalRetweets",
+               favorites::text AS favorites, replies::text AS replies,
+               impressions::text AS impressions, url,
+               array_to_string(source_queries, '|') AS term
+          FROM x_post_unique
+         WHERE corpus = '{corpus}' AND post_type IN ('original', 'reply')
+           AND created_at >= '{start}'
+    """
+    raw = pd.read_sql(sql, get_engine())
+    raw["ts"] = pd.to_datetime(raw.ts, utc=True)
+    raw["createdAt"] = raw.ts.dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    return raw.fillna({c: "" for c in ["alias", "userName", "text", "url"]})
+
+
+def build(stream: str = "prior") -> None:
+    spec = STREAMS[stream]
+    raw = load_raw() if spec["corpus"] is None else load_db(spec["corpus"], spec["start"])
+    terms = raw.groupby("_id").term.agg(lambda t: "|".join(sorted(set("|".join(t).split("|")))))
     posts = raw.drop_duplicates("_id").drop(columns="term").merge(terms.rename("terms"), on="_id")
     posts = posts.join(geocode_series(posts.userLocation))
+    if stream == "es":
+        foreign = posts.userLocation.str.contains(ES_FOREIGN)
+        print(f"es filter: {int((foreign & posts.state.notna()).sum())} state-geocoded posts name a "
+              f"Spanish-speaking country or Baja California -> ungeocoded")
+        posts.loc[foreign, ["state", "county_fips"]] = None
 
     key = (posts.text.str.lower().str.replace(r"https?://\S+|@\w+|\d+", "", regex=True)
            .str.replace(r"\W+", " ", regex=True).str.strip().str[:80])
@@ -85,7 +155,8 @@ def build() -> None:
     first = posts.assign(key=key).sort_values("ts").drop_duplicates("key")._id
     posts["copypasta_first"] = posts.copypasta & posts._id.isin(first)
 
-    tr = posts[posts.ts < TRAIN_END]
+    # n_posts_train is the hub-window count (column name kept so the frozen prior files hash the same)
+    tr = posts[posts.ts < TRAIN_END] if spec["hub_pre2025"] else posts
     authors = (posts.sort_values("ts").groupby("userId")
                .agg(userName=("userName", "last"), bio=("bio", "last"), userLocation=("userLocation", "last"),
                     followers=("followers", "last"), verified=("verified", "last"),
@@ -100,26 +171,89 @@ def build() -> None:
           f"state-geocoded {posts.state.notna().mean():.3f}  copypasta {posts.copypasta.mean():.3f}")
 
 
-def sentiment(universe: str = "subset", batch: int = 64, chunk: int = 5_000) -> None:
-    """Score posts with the English TweetEval model. Chunked + resumable: each chunk is its
-    own parquet, and finished chunks are skipped on restart.
+def _labels(stream: str) -> pd.Series:
+    """LLM bio labels: the prior stream's, then this stream's own (labels/bio_labels_*.csv)."""
+    dirs = [XD / "labels"] + ([OUT_DIR / "labels"] if OUT_DIR != XD else [])
+    files = [f for d in dirs for f in sorted(d.glob("bio_labels_*.csv"))]
+    if not files:
+        return pd.Series(dtype=str)
+    labels = pd.concat(pd.read_csv(f, dtype=str) for f in files)
+    labels["account_type"] = labels.account_type.str.strip()
+    bad = ~labels.account_type.isin(ACCOUNT_TYPES)
+    if bad.any():
+        raise ValueError(f"unknown account types: {labels.account_type[bad].unique()}")
+    return labels.drop_duplicates("userId").set_index("userId").account_type
 
-    universe="subset" scores topic_subset.parquet (the analysis universe, ~58k posts, ~1 h on
-    this CPU); "all" scores every post (~364k, ~6 h -- a Modal job if ever needed). fp32 only:
-    int8 dynamic quantization was 2.3x faster but flipped 22% of argmax labels (2026-09-28).
-    12 threads measured fastest on the Core Ultra 7 155H (6 -> 12/s, 12 -> 18/s, 16 -> 18/s)."""
+
+def biobatch(stream: str, k: int = 5) -> None:
+    """Write bios that need an LLM label -- ag-term bio or top-1% volume, not yet labelled --
+    to labels/bio_batch_*.jsonl in the stream's directory, k interleaved batches."""
+    if stream == "prior":
+        raise SystemExit("prior-stream labels are frozen; biobatch is for en_test / es")
+    a = pd.read_parquet(OUT_DIR / "authors.parquet")
+    b = a.bio.fillna("").str.lower()
+    ag = b.str.contains(FARM) | b.str.contains(INST)
+    if stream == "es":
+        ag |= b.str.contains(FARM_ES)
+    need = ((ag & (b.str.strip() != "")) | (a.volume_pctile >= 0.99)) & ~a.userId.isin(_labels(stream).index)
+    s = a[need].sample(frac=1, random_state=0)[["userId", "userName", "bio"]]
+    s["bio"] = s.bio.fillna("").str.replace(r"\s+", " ", regex=True).str.slice(0, 300)
+    s["userName"] = s.userName.fillna("").str.slice(0, 60)
+    lab = OUT_DIR / "labels"
+    lab.mkdir(parents=True, exist_ok=True)
+    for i in range(k):
+        with open(lab / f"bio_batch_{i}.jsonl", "w", encoding="utf-8") as f:
+            for r in s.iloc[i::k].itertuples(index=False):
+                f.write(json.dumps({"userId": r.userId, "name": r.userName, "bio": r.bio}, ensure_ascii=False) + "\n")
+    print(f"{len(s):,} bios to label in {k} batches under {lab}")
+
+
+def _fingerprint(name: str, model) -> dict:
+    """Model commit + weights hash, and the device/library versions that produced the scores."""
+    import torch
+    import transformers
+
+    p = pathlib.Path(name)
+    if not p.exists():
+        from transformers.utils import cached_file
+        p = pathlib.Path(cached_file(name, "config.json")).parent
+    weights = next((p / w for w in ("pytorch_model.bin", "model.safetensors") if (p / w).exists()), None)
+    sha = hashlib.sha256(weights.read_bytes()).hexdigest() if weights else None
+    return {"model": name, "revision": getattr(model.config, "_commit_hash", None),
+            "weights": weights.name if weights else None, "weights_sha256": sha,
+            "device": str(model.device), "cuda": torch.version.cuda, "torch": torch.__version__,
+            "transformers": transformers.__version__,
+            "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None}
+
+
+def sentiment(universe: str = "subset", model_key: str = "xlmr", batch: int = 64, chunk: int = 5_000) -> None:
+    """Score posts, p_pos - p_neg. Chunked + resumable: each chunk is its own parquet, and
+    finished chunks are skipped on restart.
+
+    model_key="xlmr" is the Amendment 1 sentiment: Waree's cardiffnlp XLM-R, line breaks
+    collapsed, Cardiff @user/http preprocessing, 512 tokens, fp32, on CUDA when available
+    (run on gpu1). Output sentiment_{universe}_xlmr.parquet + a manifest of model hash and
+    device. model_key="tweeteval" reproduces the exploratory scores (sentiment_{universe}.parquet,
+    128 tokens, CPU; int8 was rejected 2026-09-28 because it flipped 22% of argmax labels).
+    universe="subset" scores topic_subset.parquet; "all" scores every post."""
     import torch
 
-    from h5n1.sentiment.core import ENGLISH_MODEL, load_model, score_probs
+    from h5n1.sentiment.core import DEFAULT_MODEL, ENGLISH_MODEL, load_model, score_probs
 
     torch.set_num_threads(12)
+    xlmr = model_key == "xlmr"
+    name, max_length, suffix = (DEFAULT_MODEL, 512, "_xlmr") if xlmr else (ENGLISH_MODEL, 128, "")
     src = "topic_subset.parquet" if universe == "subset" else "posts.parquet"
     posts = pd.read_parquet(OUT_DIR / src, columns=["_id", "text"]).sort_values("_id")
-    part_dir = OUT_DIR / f"sentiment_parts_{universe}"
+    part_dir = OUT_DIR / f"sentiment_parts_{universe}{suffix}"
     part_dir.mkdir(parents=True, exist_ok=True)
     # a local copy (curl-downloaded) sidesteps HF Hub connection resets seen 2026-09-28
-    local = ROOT / "data" / "reference" / "models" / ENGLISH_MODEL.split("/")[1]
-    model = load_model(str(local) if (local / "pytorch_model.bin").exists() else ENGLISH_MODEL)
+    local = ROOT / "data" / "reference" / "models" / name.split("/")[1]
+    if (local / "config.json").exists():
+        name = str(local)
+    model = load_model(name)
+    if xlmr and torch.cuda.is_available():
+        model[1].to("cuda")
     for start in range(0, len(posts), chunk):
         dest = part_dir / f"part_{start:07d}.parquet"
         if dest.exists():
@@ -130,14 +264,20 @@ def sentiment(universe: str = "subset", batch: int = 64, chunk: int = 5_000) -> 
         rows = []
         texts = sub.loc[order, "text"].tolist()
         for i in range(0, len(texts), batch):
-            rows.extend(score_probs(texts[i:i + batch], model))
+            rows.extend(score_probs(texts[i:i + batch], model, max_length=max_length, collapse_newlines=xlmr))
         out = pd.DataFrame(rows, columns=["p_neg", "p_neu", "p_pos"], index=order)
         out.insert(0, "_id", sub.loc[order, "_id"].values)
         out["sentiment"] = out.p_pos - out.p_neg
         out.to_parquet(dest, index=False)
         print(f"chunk {start:,}-{start + len(sub):,} done", flush=True)
     parts = pd.concat(pd.read_parquet(p) for p in sorted(part_dir.glob("part_*.parquet")))
-    parts.assign(model=ENGLISH_MODEL).to_parquet(OUT_DIR / f"sentiment_{universe}.parquet", index=False)
+    tag = DEFAULT_MODEL if xlmr else ENGLISH_MODEL
+    parts.assign(model=tag).to_parquet(OUT_DIR / f"sentiment_{universe}{suffix}.parquet", index=False)
+    if xlmr:
+        meta = {**_fingerprint(name, model[1]), "max_length": max_length, "collapse_newlines": True,
+                "rows": len(parts)}
+        json.dump(meta, open(OUT_DIR / f"sentiment_{universe}{suffix}.json", "w"), indent=2)
+        print(json.dumps(meta, indent=2))
     print(f"sentiment rows {len(parts):,}  mean {parts.sentiment.mean():+.3f}")
 
 
@@ -147,20 +287,18 @@ MEDIA_FALLBACK = re.compile(r"\b(?:news|newspaper|journalist|reporter|editor|cor
                             r"press)\b", re.I)
 
 
-def accounts() -> None:
+def accounts(stream: str = "prior") -> None:
     authors = pd.read_parquet(OUT_DIR / "authors.parquet")
-    labels = pd.concat(pd.read_csv(f, dtype=str) for f in sorted((OUT_DIR / "labels").glob("bio_labels_*.csv")))
-    labels["account_type"] = labels.account_type.str.strip()
-    bad = ~labels.account_type.isin(ACCOUNT_TYPES)
-    if bad.any():
-        raise ValueError(f"unknown account types: {labels.account_type[bad].unique()}")
-    labels = labels.drop_duplicates("userId").set_index("userId").account_type
+    labels = _labels(stream)
     authors["type_source"] = authors.userId.isin(labels.index).map({True: "llm_bio", False: "regex"})
     fallback = authors.bio.fillna("").str.contains(MEDIA_FALLBACK).map(
         {True: "media_aggregator", False: "general_public"})
     authors["account_type"] = authors.userId.map(labels).fillna(fallback)
     authors["hub"] = (authors.volume_pctile >= 0.99) & ~authors.account_type.isin(
         ["farmer_keeper", "ag_institution"])
+    if stream == "en_test":
+        prior_hubs = pd.read_parquet(XD / "authors.parquet", columns=["userId", "hub"]).query("hub").userId
+        authors["hub"] |= authors.userId.isin(prior_hubs)
     authors.to_parquet(OUT_DIR / "authors.parquet", index=False)
     print(authors.groupby(["account_type", "type_source"]).size().unstack(fill_value=0))
     print(f"hubs: {authors.hub.sum()} authors, {authors.loc[authors.hub, 'n_posts'].sum():,} posts")
@@ -179,10 +317,16 @@ def subset() -> None:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("step", choices=["build", "sentiment", "accounts", "subset"])
+    ap.add_argument("step", choices=["build", "biobatch", "sentiment", "accounts", "subset"])
+    ap.add_argument("--stream", choices=list(STREAMS), default="prior")
+    ap.add_argument("--out", help="override the stream's output directory (e.g. to rebuild prior files elsewhere)")
     ap.add_argument("--universe", choices=["subset", "all"], default="subset")
+    ap.add_argument("--model", choices=["xlmr", "tweeteval"], default="xlmr")
     a = ap.parse_args()
+    OUT_DIR = pathlib.Path(a.out) if a.out else STREAMS[a.stream]["out"]
     if a.step == "sentiment":
-        sentiment(a.universe)
+        sentiment(a.universe, a.model)
+    elif a.step == "subset":
+        subset()
     else:
-        {"build": build, "accounts": accounts, "subset": subset}[a.step]()
+        {"build": build, "biobatch": biobatch, "accounts": accounts}[a.step](a.stream)

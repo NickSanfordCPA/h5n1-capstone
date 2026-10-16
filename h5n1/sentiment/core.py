@@ -5,10 +5,11 @@ by the Modal batch job (full corpus). No DB access, no file I/O, no globals: tex
 in, scores out. That is what makes "it worked in the notebook" mean it works in
 production. See ARCHITECTURE_SKETCH.md section 3.
 
-Two models. DEFAULT_MODEL (XLM-R) is the multilingual one the Meta arm was built
-around. ENGLISH_MODEL is the conventional baseline for the English-only X pull:
-cardiffnlp's TweetEval RoBERTa retrained on tweets through 2021, labels
-negative / neutral / positive. `translate` stays a stub -- the X pull is English.
+Two models. DEFAULT_MODEL (XLM-R) is the multilingual one: the Meta arm was built
+around it, Waree's x_post_sentiment uses it, and Amendment 1 of the X pre-registration
+makes it the confirmatory sentiment for English and Spanish. ENGLISH_MODEL is cardiffnlp's
+TweetEval RoBERTa retrained on tweets through 2021, the model behind every exploratory X
+sentiment result. Both label negative / neutral / positive. `translate` stays a stub.
 """
 from __future__ import annotations
 
@@ -35,19 +36,24 @@ def translate(texts: list[str]) -> list[str]:
     raise NotImplementedError("Implemented in the sentiment phase.")
 
 
-def preprocess(text: str) -> str:
-    """The cardiffnlp convention: user handles -> '@user', links -> 'http'."""
-    text = re.sub(r"@\w+", "@user", text or "")
+def preprocess(text: str, collapse_newlines: bool = False) -> str:
+    """The cardiffnlp convention: user handles -> '@user', links -> 'http'. With
+    collapse_newlines, line breaks become one space first (the Amendment 1 XLM-R spec)."""
+    text = text or ""
+    if collapse_newlines:
+        text = re.sub(r"\s*[\r\n]+\s*", " ", text)
+    text = re.sub(r"@\w+", "@user", text)
     return re.sub(r"https?://\S+", "http", text)
 
 
-def score_probs(texts: list[str], model=None, max_length: int = 128) -> list[tuple[float, float, float]]:
-    """(p_negative, p_neutral, p_positive) per text. Pure: no I/O, no side effects."""
+def score_probs(texts: list[str], model=None, max_length: int = 128,
+                collapse_newlines: bool = False) -> list[tuple[float, float, float]]:
+    """(p_negative, p_neutral, p_positive) per text, on the model's device. Pure: no I/O."""
     import torch
 
     tokenizer, mdl = model or load_model(ENGLISH_MODEL)
-    enc = tokenizer([preprocess(t) for t in texts], padding=True, truncation=True,
-                    max_length=max_length, return_tensors="pt")
+    enc = tokenizer([preprocess(t, collapse_newlines) for t in texts], padding=True, truncation=True,
+                    max_length=max_length, return_tensors="pt").to(mdl.device)
     with torch.inference_mode():
         p = torch.softmax(mdl(**enc).logits, dim=-1)
     labels = [mdl.config.id2label[i].lower() for i in range(p.shape[1])]
