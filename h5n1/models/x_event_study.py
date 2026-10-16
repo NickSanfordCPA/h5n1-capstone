@@ -26,8 +26,9 @@ of that target in the prior 30 days -- the early-warning question proper. All-ev
 mix in posts reacting to detections that already happened.
 
 Study period defaults to the exploratory span, 2022-06-01..2024-12-31 (train window). The
-confirmatory run in docs/x_event_preregistration.md uses --start 2025-01-01 --end <last
-poultry confirmation - 30 days>.
+confirmatory run (Amendment 1 of docs/x_event_preregistration.md, the primary test) is
+
+    DB_PORT=5433 uv run python -m h5n1.models.x_event_study events --start 2025-01-01 --end <last poultry date - 30>         --events data/X_derived/test_2025/labels/illness_posts_screened.parquet --tag en_test
 
     DB_PORT=5433 uv run python -m h5n1.models.x_event_study            # event study
     DB_PORT=5433 uv run --extra modeling python -m h5n1.models.x_event_study regress  # sentiment models
@@ -52,10 +53,12 @@ KS = (7, 14, 30)
 ONSET_LOOKBACK = 30
 N_PERM, N_BOOT, SEASON_HALFWIDTH = 2000, 2000, 15
 STATES = sorted(FIPS_STATE.values())
+EVENTS = LAB / "illness_posts_screened.parquet"  # --events; Amendment 1 points it at a stream's file
+TAG = ""  # --tag, appended to output names so streams sharing a window don't overwrite each other
 
 
 def load_events() -> pd.DataFrame:
-    ev = pd.read_parquet(LAB / "illness_posts_screened.parquet")
+    ev = pd.read_parquet(EVENTS)
     ev = ev[ev.exclude == ""].copy()
     ev["day"] = ev.ts.dt.tz_convert(None).dt.normalize()
     ev["week"] = ev.day.dt.to_period("W")
@@ -352,8 +355,8 @@ def main() -> None:
                 rows.append({"target": target, "subset": "new_onset" if onset else "all", "k": k, **r})
     res = pd.DataFrame(rows)
     OUT.mkdir(parents=True, exist_ok=True)
-    res.to_csv(OUT / f"results_{START:%Y%m%d}_{END:%Y%m%d}.csv", index=False)
-    ev.to_csv(OUT / f"events_{START:%Y%m%d}_{END:%Y%m%d}.csv", index=False)
+    res.to_csv(OUT / f"results_{START:%Y%m%d}_{END:%Y%m%d}{TAG}.csv", index=False)
+    ev.to_csv(OUT / f"events_{START:%Y%m%d}_{END:%Y%m%d}{TAG}.csv", index=False)
     pd.set_option("display.width", 200)
     print(f"events after screen + state-week dedup: {len(ev)} in {ev.state.nunique()} states")
     print(res.round(3).to_string(index=False))
@@ -369,8 +372,11 @@ if __name__ == "__main__":
     ap.add_argument("--train-end", default="2023-11-30")    # forest step only
     ap.add_argument("--test-start", default="2024-01-01")   # forest step only
     ap.add_argument("--ci", type=float, default=95.0)       # forest step only
+    ap.add_argument("--events", default=str(EVENTS))
+    ap.add_argument("--tag", default="")
     a = ap.parse_args()
     START, END = pd.Timestamp(a.start), pd.Timestamp(a.end)  # module globals read by every step
+    EVENTS, TAG = pathlib.Path(a.events), (f"_{a.tag}" if a.tag else "")
     if a.step == "forest":
         main_forest(a.train_end, a.test_start, a.ci)
     else:
