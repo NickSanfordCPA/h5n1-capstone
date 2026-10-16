@@ -142,6 +142,44 @@ claim.
 - Event counts and screen yield (flagged, `local_obs`, `illness_seen`, excluded by reason),
   for each period.
 
+**5. Spanish stream: a secondary nested arm, never used for claims.**
+- **Why secondary.** Only about 2% of `twitterapi_es` originals and replies geocode to a US
+  state: 1,472 posts from 478 authors, 2021-09..2026-09, 293 of them from 2025 on. Some are
+  misplaced (for example "Bogotá, D.C., Colombia" → DC, "Tijuana, Baja California" → CA).
+  The Spanish features will equal their fill value on nearly every state-day, so **a null is
+  expected by construction** and says nothing about whether Spanish-language posts matter.
+  Spanish is still worth reporting: it is the one stream collected by a single process over
+  the whole period, so it has no 2025-01-01 seam. The counts are reported as a finding about
+  the data.
+- **Input:** `twitterapi_es`, `post_type IN ('original', 'reply')`, 2022-06-01 .. 2026-09-30.
+- **Geography:** `x_location` as for English, then a Spanish-only filter. It drops any post
+  whose `user_location` names one of the other Spanish-speaking countries (in Spanish or
+  English), or Baja California. The English geocoder is not changed.
+- **Accounts, hubs, copypasta:** as steps 1–3, computed within the Spanish stream. A hub is
+  in the top 1% of Spanish authors by pre-2025 post count and is not farmer_keeper or
+  ag_institution. The seam rule in item 1 does not apply, because there is no seam.
+- **Sentiment:** the XLM-R spec in item 1.
+- **Firsthand reports:** the MiniLM screen and the gold set are English-only, so there is no
+  screen. **Every** US-geocoded Spanish subset post, in both periods, is reviewed by subagents
+  with Appendix B, then Appendix C. Then one event per state per ISO week.
+- **Features:** `x_firsthand_30d_es` and `x_sent_7d_es`, defined exactly as the English two.
+  They are separate columns, not pooled, so a change in the language mix cannot move the
+  English means.
+- **Arms and comparisons:**
+  - C = B + `x_firsthand_30d_es` + `x_sent_7d_es`.
+  - C − B on the six (k, slice) cells is Spanish's increment over English.
+  - A + the two Spanish features − A is Spanish alone, with no seam in either arm.
+  - Both use the registered bootstrap and are reported with 95% CIs. No multiplicity
+    correction is applied, because no claim is made from them.
+- **Event study:** the Spanish event count is reported for each period. If there are at least
+  10 test-period new-onset events (not expected), the item 2 event study is also run on
+  Spanish events alone and on English and Spanish pooled, as a secondary result.
+
+**6. Compute.** Every model inference step (XLM-R sentiment and MiniLM embeddings) runs in
+fp32 on `gpu1` (CUDA), for both periods and both languages, so no score depends on which
+machine produced it. The run records the device, the CUDA and torch versions, and the model
+hashes.
+
 **Frozen derived inputs** (training period, SHA-256 at amendment):
 
 | file under `data/X_derived/` | hash |
