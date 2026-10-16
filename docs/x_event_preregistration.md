@@ -8,6 +8,10 @@ This supersedes an uncommitted draft from 2026-09-28. That draft pre-registered 
 logistic regressions. It was replaced once the project asked the question the way it asked
 GDELT's: does X add lift to **Waree's production forest**, not to a weaker stand-in?
 
+> **Amended 2026-10-16 — read [Amendment 1](#amendment-1-2026-10-16) first.** The repull
+> turned out not to be a full-period pull, so the primary test changes. The amendment
+> overrides anything below that it contradicts; everything it does not mention stands.
+
 ## What has already been seen, and so cannot confirm itself
 
 Every analysis below was run on the prior cohort's X pull (2022-06-01..2024-12-31), before
@@ -24,6 +28,127 @@ this document existed. They chose the design:
 
 The honest prior is therefore **no lift**. The confirmatory run is a held-out check of that
 null on the production split, as much as a search for a positive.
+
+## Amendment 1 (2026-10-16)
+
+**Drafted before any 2025–26 X feature was built, joined to outcomes, or scored.** What had
+been done with 2025–26 posts at drafting: Waree's `x_post_sentiment` table scored the text of
+every `x_post_unique` post with XLM-R (no outcomes involved, and not the registered sentiment),
+and counts of posts by corpus, query, language, type and quarter were profiled. Nothing else. As
+far as the drafter knows, no one has put 2025–26 X data next to outbreak data; reviewers confirm
+or correct this in the PR.
+
+### What the repull turned out to be
+
+The posts are in Cloud SQL as `x_post_unique` (532,537 posts). Its `corpus` column shows a
+**stitched** corpus, not the full-period repull this document assumed:
+
+| corpus | posts | dates | queries |
+|---|---|---|---|
+| `prev_cohort_en` | 364,220 | 2022-06-01 .. 2024-12-31 | the prior cohort's per-term search (the `data/X` CSVs) |
+| `twitterapi_en` | 78,591 | 2021-09-01 .. 2022-05-31 and 2025-01-01 .. 2026-09-30 | `phrases`, `subtypes` |
+| `twitterapi_es` | 76,631 | 2021-09 .. 2026-09 | `phrases`, `subtypes_and_rest` |
+| `twitterapi_fr` | 13,095 | 2022-04 .. 2024-12 | as above |
+
+`twitterapi_en` has **no posts between 2022-06-01 and 2024-12-31**. So English collection
+changes process on 2025-01-01, the exact train/test boundary: the forest would be trained on
+features from one scraper and query set and scored on features from another. English volume
+goes from 72,614 posts in 2024 Q4 to 28,116 in 2025 Q1 and 3,400–9,600 a quarter afterwards.
+Some of that is the news cycle and some is collection, and the data cannot separate the two.
+The query strings behind `phrases` and `subtypes` are not recorded in the database.
+
+`x_firsthand_30d` is a count and `x_sent_7d` depends on who is posting, so a shift in either
+at the seam is confounded with signal. A forest lift, or a harm, at 2025-01-01 could be the
+change of scraper. The registered forest test therefore cannot support a claim either way.
+
+### What changes
+
+**1. Data.**
+- Input: `x_post_unique` with `lang = 'en'`, `corpus IN ('prev_cohort_en', 'twitterapi_en')`,
+  `post_type IN ('original', 'reply')`. Quote posts are dropped, because the prior cohort has
+  none.
+- **Training period: the exploratory outputs are reused as they are,** not rebuilt. There is
+  no new-query pull for 2022–24 to rebuild from, and rebuilding the same posts with the same
+  frozen code would reproduce them. The frozen files are listed below. The "Every step … is
+  re-run on the whole repull" rule under Data is void.
+- `twitterapi_en` posts before 2022-06-01 are not used. They would make the training period
+  mixed-source too.
+- **Test period:** pipeline steps 1–7 are applied to `twitterapi_en` posts from 2025-01-01 on.
+  Bios come from `raw->'author'->'profile_bio'->>'description'` (94% filled) and location
+  from `user_location`. Outputs go to `data/X_derived/test_2025/` and never overwrite the
+  frozen training files.
+- **Hubs in the test period:** an author is a hub if they were a hub in training, OR if they
+  are in the top 1% of 2025+ `twitterapi_en` authors by post count and are not
+  farmer_keeper or ag_institution. The training rule cannot find hubs that only exist in the
+  new corpus; this rule uses post counts only, never outcomes. Copypasta is flagged within the
+  test period.
+- **Account labels:** existing labels are kept. New test-period authors that need an LLM label
+  (step 2) are labelled by subagents using Appendix A.
+- **Sentiment** stays the registered fp32 TweetEval model (step 5). `x_post_sentiment` is not
+  used anywhere in this test.
+
+**2. Primary test: an out-of-sample replication of the event study.** It replaces the
+forest's six comparisons as the claim-bearing test. It compares outbreak *rates* after a
+firsthand report with the same state's season-matched rate, and uses no X volume level. A
+change in collection changes how many events are found; it biases the lift only if the new
+queries reach systematically different reporters, and that limit is stated with the result.
+- **Events:** test-period `illness_seen` posts (step 6, threshold 0.55, every flagged post
+  reviewed). Appendix C exclusions are made by a subagent that sees post text, author state and
+  date only. Then one event per state per ISO week, the earliest post (step 7).
+- **Window:** 2025-01-01 .. (the last `fact_h5n1_outbreak` date at run time − 30 days).
+- **Target:** poultry (`fact_h5n1_outbreak`), **new-onset** (no detection in the state in the
+  prior 30 days), **k = 30**: any detection in the state in (d, d+30].
+- **Statistic:** lift = event rate ÷ B3, where B3 is the same-state, ±15 days-of-year
+  permutation baseline drawn from onset-eligible days in the test window; 2,000 draws, seed
+  20260928. B1, B2 and a 95% bootstrap CI on the event rate are reported alongside.
+- **Hypothesis and claim rule:** one test, one-sided, H1 lift > 1, which is the exploratory
+  direction (1.45×). A lead is claimed if the permutation p ≤ 0.05. Otherwise the result is
+  no detectable lead. Either way the lift and n are reported.
+- **Minimum size:** fewer than 10 new-onset events means no confirmatory test (the code
+  returns nothing below 10). That is reported as such. The exploration found 54 in 31 months;
+  scaled to 21 months and a corpus about a quarter as dense, that suggests **about 10**, so
+  this rule may well trigger. **Even above it the test is underpowered.** A null is weak evidence against a lead, and the direction and size of the
+  lift are reported as the main descriptive result.
+- **Code:** `h5n1/models/x_event_study.py` (`events` step) as committed with this amendment,
+  run as
+
+      DB_PORT=5433 uv run python -m h5n1.models.x_event_study events --start 2025-01-01 --end <last poultry date − 30>
+
+  pointed at the test-period event file. The only code change allowed is that input path.
+
+**3. The registered forest test is still run once, as specified,** with one change: training
+starts **2022-07-01**, not 2022-02-08, so that no training row predates the posts behind its
+features (as in the exploratory `x_lift` run). All six rows are reported, labelled
+**confounded by the 2025-01-01 collection change**. They are not used for a lift or a harm
+claim.
+
+**4. New secondary analyses** (reported, never used for claims):
+- The forest test with both X features z-scored **within each period**: training rows by the
+  training period's mean and SD, test rows by the test period's. This uses X values only,
+  never outcomes. It removes level shifts but not changes in who posts.
+- The event study at k = 7 and 14, on all events, and on the wild-bird target, in the test
+  window.
+- Event counts and screen yield (flagged, `local_obs`, `illness_seen`, excluded by reason),
+  for each period.
+
+**Frozen derived inputs** (training period, SHA-256 at amendment):
+
+| file under `data/X_derived/` | hash |
+|---|---|
+| `labels/illness_posts_screened.parquet` | `772f3cba…b9b0c9` |
+| `topic_subset.parquet` | `29531f40…85e27e` |
+| `sentiment_subset.parquet` | `9c9f5855…d93e32` |
+| `authors.parquet` | `b72bc951…01dc68` |
+| `local_observation.parquet` | `42089ab9…acd51c` |
+
+### Forking paths, stated
+
+The new primary is the design that looked best in exploration (the 30-day new-onset lift of
+1.45×, p = .023). The forest was null, and it is the one that was demoted. The reason for
+switching is the collection seam, which was found from post counts and not from any result.
+But the choice of replacement was made knowing the exploratory results, and readers should
+weigh it that way. The exploratory p = .023 does not survive the 12 tests run at the time, so
+the replication is the first real test of that lead.
 
 ## Question
 
