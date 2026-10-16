@@ -166,8 +166,9 @@ claim.
   They are separate columns, not pooled, so a change in the language mix cannot move the
   English means.
 - **Arms and comparisons:**
-  - C = B + `x_firsthand_30d_es` + `x_sent_7d_es`.
-  - C − B on the six (k, slice) cells is Spanish's increment over English.
+  - D = B + `x_firsthand_30d_es` + `x_sent_7d_es`. (Named D, not C: the registered secondary
+    "Arm C: B + media share" below keeps its letter.)
+  - D − B on the six (k, slice) cells is Spanish's increment over English.
   - A + the two Spanish features − A is Spanish alone, with no seam in either arm.
   - Both use the registered bootstrap and are reported with 95% CIs. No multiplicity
     correction is applied, because no claim is made from them.
