@@ -25,7 +25,7 @@ X FEATURES (state, broadcast to every county in the state; past-only, windows en
   x_sent_7d        mean sentiment (p_pos - p_neg) of the state's subset posts over [d-6, d];
                    filled with the training mean where the state had no posts. TweetEval in
                    the exploratory run; XLM-R (--sentiment xlmr) under Amendment 1.
-  *_es             the same two from the Spanish stream (--es), for arms A +ES and C +X +ES.
+  *_es             the same two from the Spanish stream (--es), for arms A +ES and D +X +ES.
 Media share is deliberately excluded: it measures news mix, and news (GDELT) was already null.
 
 EVALUATION: PR-AUC on the test year, all positives and the new-onset slice
@@ -161,8 +161,8 @@ def main(n_boot: int = N_BOOT, ci: float = 95.0, tag: str = "exploratory_2024",
     # ones are Amendment 1 item 5 secondaries, reported at 95% with no correction
     comps = [("B +X", "A baseline", ci)]
     if es_dirs:
-        arms |= {"A +ES": base + xcols_es, "C +X +ES": base + X_COLS + xcols_es}
-        comps += [("C +X +ES", "B +X", 95.0), ("A +ES", "A baseline", 95.0)]
+        arms |= {"A +ES": base + xcols_es, "D +X +ES": base + X_COLS + xcols_es}
+        comps += [("D +X +ES", "B +X", 95.0), ("A +ES", "A baseline", 95.0)]
     rng = np.random.default_rng(RANDOM_STATE)
     rows, imps = [], []
     for k in KS:
@@ -228,7 +228,7 @@ if __name__ == "__main__":
     ap.add_argument("--tag", default="exploratory_2024")
     ap.add_argument("--sentiment", choices=["tweeteval", "xlmr"], default="tweeteval")
     ap.add_argument("--en-test", action="store_true", help="add the test_2025 English stream to the prior one")
-    ap.add_argument("--es", action="store_true", help="add the Spanish arms (A +ES, C +X +ES)")
+    ap.add_argument("--es", action="store_true", help="add the Spanish arms (A +ES, D +X +ES)")
     ap.add_argument("--standardize", action="store_true", help="z-score X features within each period")
     a = ap.parse_args()
     TRAIN_START, TEST_START, TEST_END = a.train_start, a.test_start, a.test_end  # module globals
