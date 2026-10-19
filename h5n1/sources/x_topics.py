@@ -21,7 +21,7 @@ STREAMS (Amendment 1 of docs/x_event_preregistration.md; directories as in x_pos
   en_test  `screen` uses the frozen screen, never refit on new posts: the LR is fit on the
            stored gold embeddings (labels/gold_minilm.npy) and posts are flagged at the
            prior stream's review threshold (0.55). Every flagged post is reviewed.
-  es       no screen -- the gold set and MiniLM are English-only. `allbatch` sends every
+  es, fr   no screen -- the gold set and MiniLM are English-only. `allbatch` sends every
            subset post to review.
 Then, every stream: `exclbatch` writes each illness_seen post (text, author state, date only)
 for the Appendix C exclusion screen, and `exclmerge` turns the reviewer's
@@ -138,7 +138,7 @@ def screen(stream: str = "prior") -> None:
 
 
 def allbatch() -> None:
-    """No screen (the es stream): every subset post is a candidate and is reviewed."""
+    """No screen (the es and fr streams): every subset post is a candidate and is reviewed."""
     sub = pd.read_parquet(OUT / "topic_subset.parquet", columns=["_id", "text"])
     LAB.mkdir(parents=True, exist_ok=True)
     cand = sub.sample(frac=1, random_state=0).assign(score=1.0)

@@ -11,6 +11,9 @@ docs/x_event_preregistration.md):
            -> data/X_derived/test_2025/
   es       x_post_unique, corpus twitterapi_es, originals + replies from 2022-06-01
            -> data/X_derived/es/
+  fr       x_post_unique, corpus twitterapi_fr, originals + replies from 2022-06-01
+           -> data/X_derived/fr/ (added 2026-10-19; not in Amendment 1, so exploratory
+           until an amendment names it)
 
     uv run python -m h5n1.sources.x_posts build    [--stream S]   # posts.parquet, authors.parquet
     uv run python -m h5n1.sources.x_posts biobatch  --stream S    # bios needing an LLM label
@@ -70,6 +73,7 @@ STREAMS = {
     "prior": {"out": XD, "corpus": None, "start": None, "hub_pre2025": True},
     "en_test": {"out": XD / "test_2025", "corpus": "twitterapi_en", "start": "2025-01-01", "hub_pre2025": False},
     "es": {"out": XD / "es", "corpus": "twitterapi_es", "start": "2022-06-01", "hub_pre2025": True},
+    "fr": {"out": XD / "fr", "corpus": "twitterapi_fr", "start": "2022-06-01", "hub_pre2025": True},
 }
 OUT_DIR = XD  # set from --stream / --out in __main__
 
@@ -81,6 +85,39 @@ ES_FOREIGN = re.compile(
     r"guatemala|guinea ecuatorial|equatorial guinea|honduras|m[ée]xico|mexico|nicaragua|panam[áa]|"
     r"paraguay|per[úu]|peru|rep[úu]blica dominicana|dominican republic|uruguay|venezuela|"
     r"baja california)\b", re.I)
+# French equivalent: France, Belgium, Switzerland, Quebec/French Canada, francophone Africa and
+# the Caribbean, and the French regions and cities common in these profiles. Most of these
+# already fail to geocode; the filter catches the ones that pick up a stray state token
+# ("Neuchâtel, NE" reads as Nebraska) or a French postcode that is also a US ZIP. The tail
+# of the list was added after reading every state-geocoded fr location on 2026-10-19.
+FR_FOREIGN = re.compile(
+    r"\b(?:france|fran[çc]aise?|belgi(?:que|um|e)|bruxelles|brussels|wallonie|li[èe]ge|namur|suisse|"
+    r"switzerland|gen[èe]ve|lausanne|neuch[âa]tel|fribourg|valais|vaud|luxembourg|monaco|qu[ée]bec|qc|"
+    r"montr[ée]al|gatineau|laval|sherbrooke|trois-rivi[èe]res|saguenay|l[ée]vis|outaouais|acadie|"
+    r"nouveau-brunswick|moncton|canada|ha[ïi]ti|port-au-prince|martinique|guadeloupe|r[ée]union|"
+    r"guyane|mayotte|nouvelle-cal[ée]donie|polyn[ée]sie|tahiti|s[ée]n[ée]gal|dakar|c[ôo]te d.ivoire|"
+    r"abidjan|cameroun|douala|yaound[ée]|mali|bamako|burkina|ouagadougou|niger|niamey|b[ée]nin|"
+    r"cotonou|togo|lom[ée]|guin[ée]e|conakry|gabon|libreville|congo|rdc|kinshasa|brazzaville|"
+    r"madagascar|antananarivo|maroc|morocco|casablanca|rabat|alg[ée]rie|algeria|alger|tunisie|"
+    r"tunisia|tunis|paris|lyon|marseille|toulouse|nice|nantes|bordeaux|lille|rennes|strasbourg|"
+    r"montpellier|toulon|amiens|caen|brest|angers|rouen|metz|nancy|grenoble|dijon|reims|"
+    r"(?<!new )orl[ée]ans|bretagne|normandie|alsace|lorraine|provence|occitanie|aquitaine|"
+    r"auvergne|bourgogne|picardie|champagne|ile-de-france|[îi]le de france|pays de la loire|"
+    r"pays basque|corse|savoie|rh[ôo]ne|maine-et-loire|du maine|penn ar bed|finist[èe]re|cannes|"
+    r"limoges|prahecq|chatelaillon|collonges|bogot[áa]|colombia|"
+    # French phrases the geocoder reads as a state code ("ICI et LA", "ETATS DE CHOC")
+    r"ici et la|etats de choc|they,she,chi)\b", re.I)
+# French names of US places, put into English before geocoding the fr stream only: the
+# geocoder strips accents and knows only English names, so "Louisiane" would never match.
+FR_US = [(r"\b[ée]tats[- ]unis(?: d'am[ée]rique)?\b", "USA"), (r"\blouisiane\b", "Louisiana"),
+         (r"\bfloride\b", "Florida"), (r"\bcalifornie\b", "California"), (r"\bg[ée]orgie\b", "Georgia"),
+         (r"\bcaroline du nord\b", "North Carolina"), (r"\bcaroline du sud\b", "South Carolina"),
+         (r"\bvirginie-occidentale\b", "West Virginia"), (r"\bvirginie\b", "Virginia"),
+         (r"\bpennsylvanie\b", "Pennsylvania"), (r"\bnouveau-mexique\b", "New Mexico"),
+         (r"\bdakota du nord\b", "North Dakota"), (r"\bdakota du sud\b", "South Dakota"),
+         (r"\bnouvelle-orl[ée]ans\b", "New Orleans, LA"), (r"\bnouveau-hampshire\b", "New Hampshire"),
+         (r"\bnouveau-jersey\b", "New Jersey"), (r"\bhawa[ïi]\b", "Hawaii")]
+FOREIGN_BY_STREAM = {"es": ES_FOREIGN, "fr": FR_FOREIGN}
 
 # bios that go to the LLM labeller (recovered verbatim from the 2026-09-28 prior-stream run)
 FARM = (r"\b(farm\w*|ranch\w*|cattle\w*|cowboy|cowgirl|dairy\w*|poultry|broiler\w*|egg|eggs|turkey|turkeys|"
@@ -92,6 +129,12 @@ INST = (r"\b(extension|veterinar\w*|vet|dvm|animal health|usda|aphis|department 
 FARM_ES = (r"\b(granj\w*|ganad\w*|rancho\w*|ranchero\w*|av[íi]col\w*|avicult\w*|gallin\w*|pollo\w*|"
            r"aves de corral|huevos?|lecher\w*|campesin\w*|agricult\w*|agropecuari\w*|agr[óo]nom\w*|"
            r"cosecha\w*|cerdos?|porcin\w*|veterinari\w*|senasa|sagarpa|sader)\b")
+# French equivalents, used only for the fr stream
+FARM_FR = (r"\b(agricult\w*|[ée]leveu\w*|[ée]levage\w*|ferme|fermes|fermier\w*|exploitant\w*|paysan\w*|"
+           r"volaill\w*|avicult\w*|avicole\w*|poule\w*|poulet\w*|canards?|foie gras|[œo]e?ufs?|laiti\w*|"
+           r"bovin\w*|porcin\w*|porcs?|ovin\w*|agronom\w*|agroalimentaire|v[ée]t[ée]rinaire\w*|anses|mapaq|"
+           r"fnsea|chambre d'agriculture|coop[ée]rative agricole)\b")
+FARM_BY_STREAM = {"es": FARM_ES, "fr": FARM_FR}
 
 
 def _term(path: pathlib.Path) -> str:
@@ -140,11 +183,15 @@ def build(stream: str = "prior") -> None:
     raw = load_raw() if spec["corpus"] is None else load_db(spec["corpus"], spec["start"])
     terms = raw.groupby("_id").term.agg(lambda t: "|".join(sorted(set("|".join(t).split("|")))))
     posts = raw.drop_duplicates("_id").drop(columns="term").merge(terms.rename("terms"), on="_id")
-    posts = posts.join(geocode_series(posts.userLocation))
-    if stream == "es":
-        foreign = posts.userLocation.str.contains(ES_FOREIGN)
-        print(f"es filter: {int((foreign & posts.state.notna()).sum())} state-geocoded posts name a "
-              f"Spanish-speaking country or Baja California -> ungeocoded")
+    loc = posts.userLocation
+    if stream == "fr":
+        for pat, en in FR_US:
+            loc = loc.str.replace(pat, en, regex=True, flags=re.I)
+    posts = posts.join(geocode_series(loc))
+    if stream in FOREIGN_BY_STREAM:
+        foreign = posts.userLocation.str.contains(FOREIGN_BY_STREAM[stream])
+        print(f"{stream} filter: {int((foreign & posts.state.notna()).sum())} state-geocoded posts name "
+              f"a country or region outside the US -> ungeocoded")
         posts.loc[foreign, ["state", "county_fips"]] = None
 
     key = (posts.text.str.lower().str.replace(r"https?://\S+|@\w+|\d+", "", regex=True)
@@ -193,8 +240,8 @@ def biobatch(stream: str, k: int = 5) -> None:
     a = pd.read_parquet(OUT_DIR / "authors.parquet")
     b = a.bio.fillna("").str.lower()
     ag = b.str.contains(FARM) | b.str.contains(INST)
-    if stream == "es":
-        ag |= b.str.contains(FARM_ES)
+    if stream in FARM_BY_STREAM:
+        ag |= b.str.contains(FARM_BY_STREAM[stream])
     need = ((ag & (b.str.strip() != "")) | (a.volume_pctile >= 0.99)) & ~a.userId.isin(_labels(stream).index)
     s = a[need].sample(frac=1, random_state=0)[["userId", "userName", "bio"]]
     s["bio"] = s.bio.fillna("").str.replace(r"\s+", " ", regex=True).str.slice(0, 300)
