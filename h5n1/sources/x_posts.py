@@ -19,7 +19,8 @@ docs/x_event_preregistration.md):
     uv run python -m h5n1.sources.x_posts biobatch  --stream S    # bios needing an LLM label
     uv run python -m h5n1.sources.x_posts accounts [--stream S]   # account_type + hub -> authors.parquet
     uv run python -m h5n1.sources.x_posts subset   [--stream S]   # topic_subset.parquet
-    uv run --extra ml python -m h5n1.sources.x_posts sentiment [--stream S] [--model xlmr|tweeteval]
+
+SENTIMENT is not computed here: features read Waree's x_post_sentiment via waree_sentiment().
 
 GRAIN. Geography is the author's profile location (see x_location): STATE is the modeling
 grain. A post found by several search terms is one post; `terms` keeps them all.
@@ -53,7 +54,6 @@ TOPIC SUBSET (step `subset`): state-geocoded, not a hub, and not a non-first cop
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import pathlib
 import re
@@ -255,77 +255,16 @@ def biobatch(stream: str, k: int = 5) -> None:
     print(f"{len(s):,} bios to label in {k} batches under {lab}")
 
 
-def _fingerprint(name: str, model) -> dict:
-    """Model commit + weights hash, and the device/library versions that produced the scores."""
-    import torch
-    import transformers
+def waree_sentiment() -> pd.DataFrame:
+    """(_id, sentiment) for every scored post: Waree's x_post_sentiment (cardiffnlp XLM-R,
+    newline-only cleaning, 512 tokens), sentiment = positive_score - negative_score. The
+    project's one sentiment score since 2026-10-19; the pipeline no longer scores posts itself.
+    Posts missing from the table (French collected after 2026-10-15) have no score -- callers
+    must leave them out, never fill them with 0."""
+    from h5n1.db import get_engine
 
-    p = pathlib.Path(name)
-    if not p.exists():
-        from transformers.utils import cached_file
-        p = pathlib.Path(cached_file(name, "config.json")).parent
-    weights = next((p / w for w in ("pytorch_model.bin", "model.safetensors") if (p / w).exists()), None)
-    sha = hashlib.sha256(weights.read_bytes()).hexdigest() if weights else None
-    return {"model": name, "revision": getattr(model.config, "_commit_hash", None),
-            "weights": weights.name if weights else None, "weights_sha256": sha,
-            "device": str(model.device), "cuda": torch.version.cuda, "torch": torch.__version__,
-            "transformers": transformers.__version__,
-            "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None}
-
-
-def sentiment(universe: str = "subset", model_key: str = "xlmr", batch: int = 64, chunk: int = 5_000) -> None:
-    """Score posts, p_pos - p_neg. Chunked + resumable: each chunk is its own parquet, and
-    finished chunks are skipped on restart.
-
-    model_key="xlmr" is the Amendment 1 sentiment: Waree's cardiffnlp XLM-R, line breaks
-    collapsed, Cardiff @user/http preprocessing, 512 tokens, fp32, on CUDA when available
-    (run on gpu1). Output sentiment_{universe}_xlmr.parquet + a manifest of model hash and
-    device. model_key="tweeteval" reproduces the exploratory scores (sentiment_{universe}.parquet,
-    128 tokens, CPU; int8 was rejected 2026-09-28 because it flipped 22% of argmax labels).
-    universe="subset" scores topic_subset.parquet; "all" scores every post."""
-    import torch
-
-    from h5n1.sentiment.core import DEFAULT_MODEL, ENGLISH_MODEL, load_model, score_probs
-
-    torch.set_num_threads(12)
-    xlmr = model_key == "xlmr"
-    name, max_length, suffix = (DEFAULT_MODEL, 512, "_xlmr") if xlmr else (ENGLISH_MODEL, 128, "")
-    src = "topic_subset.parquet" if universe == "subset" else "posts.parquet"
-    posts = pd.read_parquet(OUT_DIR / src, columns=["_id", "text"]).sort_values("_id")
-    part_dir = OUT_DIR / f"sentiment_parts_{universe}{suffix}"
-    part_dir.mkdir(parents=True, exist_ok=True)
-    # a local copy (curl-downloaded) sidesteps HF Hub connection resets seen 2026-09-28
-    local = ROOT / "data" / "reference" / "models" / name.split("/")[1]
-    if (local / "config.json").exists():
-        name = str(local)
-    model = load_model(name)
-    if xlmr and torch.cuda.is_available():
-        model[1].to("cuda")
-    for start in range(0, len(posts), chunk):
-        dest = part_dir / f"part_{start:07d}.parquet"
-        if dest.exists():
-            continue
-        sub = posts.iloc[start:start + chunk]
-        # length-sorted batches: far less padding, same results
-        order = sub.text.str.len().sort_values().index
-        rows = []
-        texts = sub.loc[order, "text"].tolist()
-        for i in range(0, len(texts), batch):
-            rows.extend(score_probs(texts[i:i + batch], model, max_length=max_length, collapse_newlines=xlmr))
-        out = pd.DataFrame(rows, columns=["p_neg", "p_neu", "p_pos"], index=order)
-        out.insert(0, "_id", sub.loc[order, "_id"].values)
-        out["sentiment"] = out.p_pos - out.p_neg
-        out.to_parquet(dest, index=False)
-        print(f"chunk {start:,}-{start + len(sub):,} done", flush=True)
-    parts = pd.concat(pd.read_parquet(p) for p in sorted(part_dir.glob("part_*.parquet")))
-    tag = DEFAULT_MODEL if xlmr else ENGLISH_MODEL
-    parts.assign(model=tag).to_parquet(OUT_DIR / f"sentiment_{universe}{suffix}.parquet", index=False)
-    if xlmr:
-        meta = {**_fingerprint(name, model[1]), "max_length": max_length, "collapse_newlines": True,
-                "rows": len(parts)}
-        json.dump(meta, open(OUT_DIR / f"sentiment_{universe}{suffix}.json", "w"), indent=2)
-        print(json.dumps(meta, indent=2))
-    print(f"sentiment rows {len(parts):,}  mean {parts.sentiment.mean():+.3f}")
+    return pd.read_sql("SELECT post_id AS _id, positive_score - negative_score AS sentiment "
+                       "FROM x_post_sentiment", get_engine())
 
 
 ACCOUNT_TYPES = ["farmer_keeper", "ag_institution", "media_aggregator", "general_public"]
@@ -364,16 +303,12 @@ def subset() -> None:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("step", choices=["build", "biobatch", "sentiment", "accounts", "subset"])
+    ap.add_argument("step", choices=["build", "biobatch", "accounts", "subset"])
     ap.add_argument("--stream", choices=list(STREAMS), default="prior")
     ap.add_argument("--out", help="override the stream's output directory (e.g. to rebuild prior files elsewhere)")
-    ap.add_argument("--universe", choices=["subset", "all"], default="subset")
-    ap.add_argument("--model", choices=["xlmr", "tweeteval"], default="xlmr")
     a = ap.parse_args()
     OUT_DIR = pathlib.Path(a.out) if a.out else STREAMS[a.stream]["out"]
-    if a.step == "sentiment":
-        sentiment(a.universe, a.model)
-    elif a.step == "subset":
+    if a.step == "subset":
         subset()
     else:
         {"build": build, "biobatch": biobatch, "accounts": accounts}[a.step](a.stream)

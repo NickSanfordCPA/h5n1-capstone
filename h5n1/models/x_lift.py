@@ -23,8 +23,8 @@ X FEATURES (state, broadcast to every county in the state; past-only, windows en
   x_firsthand_30d  count of screened, state-week-deduplicated firsthand illness reports in
                    the state over [d-29, d]
   x_sent_7d        mean sentiment (p_pos - p_neg) of the state's subset posts over [d-6, d];
-                   filled with the training mean where the state had no posts. TweetEval in
-                   the exploratory run; XLM-R (--sentiment xlmr) under Amendment 1.
+                   filled with the training mean where the state had no posts. Waree's
+                   x_post_sentiment (XLM-R); posts it hasn't scored are left out.
   *_es             the same two from the Spanish stream (--es), for arms A +ES and D +X +ES.
 Media share is deliberately excluded: it measures news mix, and news (GDELT) was already null.
 
@@ -37,7 +37,7 @@ The registered forest test as Amendment 1 of docs/x_event_preregistration.md run
 reported, but labelled confounded by the 2025-01-01 collection change. The frozen prior stream
 supplies training-period features and test_2025 the test period's:
 
-    DB_PORT=5433 uv run --extra modeling python -m h5n1.models.x_lift --train-start 2022-07-01 --test-start 2025-01-01 --test-end 2026-12-31 --boot 2000 --ci 99.1667 --sentiment xlmr --en-test --tag confirmatory
+    DB_PORT=5433 uv run --extra modeling python -m h5n1.models.x_lift --train-start 2022-07-01 --test-start 2025-01-01 --test-end 2026-12-31 --boot 2000 --ci 99.1667 --en-test --tag confirmatory
     ... the same with --es --tag confirmatory_es                 # Spanish secondaries (item 5)
     ... the same with --standardize --tag confirmatory_z         # within-period z-scores (item 4)
 
@@ -53,6 +53,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import average_precision_score, roc_auc_score
 
 from h5n1.db import get_engine
+from h5n1.sources.x_posts import waree_sentiment
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 XD = ROOT / "data" / "X_derived"
@@ -66,7 +67,6 @@ RF_PARAMS = dict(n_estimators=300, max_depth=6, min_samples_leaf=2, n_jobs=12)
 N_BOOT = 300
 KEYS = {"state", "fips", "day", "target_outbreak_next_7d", "target_complete_7d", "is_conus"}
 X_COLS = ["x_firsthand_30d", "x_sent_7d"]
-SENT_FILE = "sentiment_subset.parquet"  # --sentiment xlmr -> sentiment_subset_xlmr.parquet
 
 
 def load_panel() -> pd.DataFrame:
@@ -98,8 +98,9 @@ def x_state_features(dirs: list[pathlib.Path], suffix: str = "") -> pd.DataFrame
     ev = ev.assign(week=ev.day.dt.to_period("W")).sort_values("day").drop_duplicates(["event_state", "week"])
     fh = (ev.groupby(["day", "event_state"]).size().unstack(fill_value=0)
           .reindex(days, fill_value=0).rolling(30, min_periods=1).sum())
+    scores = waree_sentiment()
     p = pd.concat(pd.read_parquet(d / "topic_subset.parquet", columns=["_id", "state", "ts"]).merge(
-        pd.read_parquet(d / SENT_FILE, columns=["_id", "sentiment"]), on="_id") for d in dirs)
+        scores, on="_id") for d in dirs)
     p["day"] = p.ts.dt.tz_convert(None).dt.normalize()
     s = p.pivot_table(index="day", columns="state", values="sentiment", aggfunc="sum").reindex(days).fillna(0)
     n = p.pivot_table(index="day", columns="state", values="_id", aggfunc="count").reindex(days).fillna(0)
@@ -208,7 +209,7 @@ def main(n_boot: int = N_BOOT, ci: float = 95.0, tag: str = "exploratory_2024",
     res = pd.DataFrame(rows)
     OUT.mkdir(parents=True, exist_ok=True)
     res.assign(n_boot=n_boot, train_start=TRAIN_START, test_start=TEST_START, test_end=TEST_END,
-               sentiment=SENT_FILE, standardized=z, outbreak_max_day=max_day.date()).to_csv(
+               sentiment="x_post_sentiment", standardized=z, outbreak_max_day=max_day.date()).to_csv(
         OUT / f"x_lift_production_baseline_{tag}.csv", index=False)
     pd.set_option("display.width", 220)
     print(res.round(4).to_string(index=False))
@@ -226,12 +227,10 @@ if __name__ == "__main__":
     ap.add_argument("--boot", type=int, default=N_BOOT)
     ap.add_argument("--ci", type=float, default=95.0)
     ap.add_argument("--tag", default="exploratory_2024")
-    ap.add_argument("--sentiment", choices=["tweeteval", "xlmr"], default="tweeteval")
     ap.add_argument("--en-test", action="store_true", help="add the test_2025 English stream to the prior one")
     ap.add_argument("--es", action="store_true", help="add the Spanish arms (A +ES, D +X +ES)")
     ap.add_argument("--standardize", action="store_true", help="z-score X features within each period")
     a = ap.parse_args()
     TRAIN_START, TEST_START, TEST_END = a.train_start, a.test_start, a.test_end  # module globals
-    SENT_FILE = "sentiment_subset_xlmr.parquet" if a.sentiment == "xlmr" else "sentiment_subset.parquet"
     en = [XD] + ([XD / "test_2025"] if a.en_test else [])
     main(a.boot, a.ci, a.tag, en, [XD / "es"] if a.es else [], a.standardize)

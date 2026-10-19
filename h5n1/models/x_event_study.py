@@ -44,6 +44,7 @@ import pandas as pd
 
 from h5n1.db import get_engine
 from h5n1.sources.x_location import FIPS_STATE
+from h5n1.sources.x_posts import waree_sentiment
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 LAB = ROOT / "data" / "X_derived" / "labels"
@@ -143,7 +144,7 @@ def state_day_sentiment() -> pd.DataFrame:
     subset (state-geocoded, hubs and non-first copypasta removed), days x states."""
     X = ROOT / "data" / "X_derived"
     p = pd.read_parquet(X / "topic_subset.parquet", columns=["_id", "state", "ts", "account_type"]).merge(
-        pd.read_parquet(X / "sentiment_subset.parquet", columns=["_id", "sentiment"]), on="_id")
+        waree_sentiment(), on="_id")
     p["day"] = p.ts.dt.tz_convert(None).dt.normalize()
     days = pd.date_range(START - pd.Timedelta(days=SENT_WINDOW), END)
     s = p.pivot_table(index="day", columns="state", values="sentiment", aggfunc="sum").reindex(
