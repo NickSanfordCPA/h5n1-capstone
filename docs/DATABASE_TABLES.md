@@ -236,8 +236,8 @@ on gpu1 on 2026-10-15. One row per post: `negative_score`, `neutral_score`, `pos
 - The scores are mostly negative (63.6% overall), because the topic itself is negative.
 
 **`x_post_analysis`** — **what the X analysis reads.** One row per `x_post` row, keyed by
-`(corpus, post_id, source_query, row_seq)`; `row_seq` numbers rows that are identical even in
-their search term. Built 2026-10-19 by `h5n1/sources/x_analysis_table.py` (`build`, then
+`(corpus, post_id, source_query, row_seq)`; `row_seq` numbers rows that share even their
+search term (French only), in md5(raw) order. Built 2026-10-19 by `h5n1/sources/x_analysis_table.py` (`build`, then
 `load`). Each row carries:
 - the post and author fields from `x_post`, plus `stream` and `search_terms`;
 - the geocoded location (`geo_level`, `state`, `county_fips`), the author's `account_type` and
@@ -248,6 +248,9 @@ their search term. Built 2026-10-19 by `h5n1/sources/x_analysis_table.py` (`buil
 - `disposition` and `disposition_step`: the first funnel step that removes the row, or
   "Sighting". The names match the step names in `docs/x_data_funnel.md` exactly;
 - `use_sentiment` (the filtered subset) and `use_sightings` (disposition = Sighting).
+
+The LLM labels can't be regenerated exactly, so this table is their record: `build` reads them
+back from it. Don't drop or truncate it without exporting those columns first.
 
 ### Feature layers
 

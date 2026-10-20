@@ -33,13 +33,12 @@ EVALUATION: PR-AUC on the test year, all positives and the new-onset slice
 
     DB_PORT=5433 uv run --extra modeling python -m h5n1.models.x_lift          # exploratory (2024 test)
 
-The registered forest test as Amendment 1 of docs/x_event_preregistration.md runs it --
-reported, but labelled confounded by the 2025-01-01 collection change. The prior stream
-supplies training-period features and en_test the test period's:
+The 2025+ test-period run. Read it as confounded by the 2025-01-01 collection change: the
+prior stream supplies training-period features and en_test the test period's.
 
     DB_PORT=5433 uv run --extra modeling python -m h5n1.models.x_lift --train-start 2022-07-01 --test-start 2025-01-01 --test-end 2026-12-31 --boot 2000 --ci 99.1667 --en-test --tag confirmatory
-    ... the same with --es --tag confirmatory_es                 # Spanish secondaries (item 5)
-    ... the same with --standardize --tag confirmatory_z         # within-period z-scores (item 4)
+    ... the same with --es --tag confirmatory_es                 # Spanish arms
+    ... the same with --standardize --tag confirmatory_z         # within-period z-scores
 
 Test rows are further limited per horizon to d + k <= the last loaded confirmation date.
 """
@@ -120,7 +119,7 @@ def prepare(df: pd.DataFrame, base: list[str], xcols: list[str], train: np.ndarr
 
 
 def standardize(X: pd.DataFrame, xcols: list[str], masks: list[np.ndarray]) -> pd.DataFrame:
-    """Amendment 1, item 4: z-score each X feature within each period (train rows by the
+    """Z-score each X feature within each period (train rows by the
     training period's mean and SD, test rows by the test period's). X values only, no outcomes."""
     X = X.copy()
     for c in xcols:
@@ -154,8 +153,8 @@ def main(n_boot: int = N_BOOT, ci: float = 95.0, tag: str = "exploratory_2024",
     base = [c for c in df.columns if c not in KEYS | set(X_COLS + xcols_es) | {"y7", "y14", "y30", "hashed"}]
     assert len(base) == 23, base
     arms = {"A baseline": base, "B +X": base + X_COLS}
-    # (new arm, reference arm, CI level): B - A is the registered comparison; the Spanish
-    # ones are Amendment 1 item 5 secondaries, reported at 95% with no correction
+    # (new arm, reference arm, CI level): B - A is the main comparison; the Spanish
+    # ones are secondaries, reported at 95% with no correction
     comps = [("B +X", "A baseline", ci)]
     if es_streams:
         arms |= {"A +ES": base + xcols_es, "D +X +ES": base + X_COLS + xcols_es}

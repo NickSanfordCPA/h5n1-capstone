@@ -6,8 +6,7 @@ in, scores out. That is what makes "it worked in the notebook" mean it works in
 production. See ARCHITECTURE_SKETCH.md section 3.
 
 Two models. DEFAULT_MODEL (XLM-R) is the multilingual one: the Meta arm was built
-around it, Waree's x_post_sentiment uses it, and Amendment 1 of the X pre-registration
-makes it the confirmatory sentiment for English and Spanish. ENGLISH_MODEL is cardiffnlp's
+around it, and Waree's x_post_sentiment, the X sentiment for every stream, uses it. ENGLISH_MODEL is cardiffnlp's
 TweetEval RoBERTa retrained on tweets through 2021, the model behind every exploratory X
 sentiment result. Both label negative / neutral / positive. `translate` stays a stub.
 """
@@ -38,7 +37,7 @@ def translate(texts: list[str]) -> list[str]:
 
 def preprocess(text: str, collapse_newlines: bool = False) -> str:
     """The cardiffnlp convention: user handles -> '@user', links -> 'http'. With
-    collapse_newlines, line breaks become one space first (the Amendment 1 XLM-R spec)."""
+    collapse_newlines, line breaks become one space first."""
     text = text or ""
     if collapse_newlines:
         text = re.sub(r"\s*[\r\n]+\s*", " ", text)

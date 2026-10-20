@@ -1,19 +1,16 @@
 """X (Twitter) keyword-search posts -> deduplicated, geocoded, flagged post and author tables.
 
 LOCAL ONLY. Outputs are parquet under data/X_derived/ (gitignored); nothing goes to GCS or
-Postgres. Three STREAMS, each with its own output directory (Amendment 1 of
-docs/x_event_preregistration.md):
+Postgres. Four STREAMS, each with its own output directory (docs/x_data_funnel.md):
 
-  prior    the prior cohort's scraper export, one CSV per search term (data/X/*.csv),
-           2022-06..2024-12 -> data/X_derived/. FROZEN: these are the training-period files
-           the amendment reuses and hashes; rebuild them only with --out pointed elsewhere.
+  prior    the prior cohort's scraper export, one CSV per search term (data/X/*.csv; the
+           originals are in gs://h5n1-raw/X/), 2022-06..2024-12 -> data/X_derived/
   en_test  x_post_unique, corpus twitterapi_en, originals + replies from 2025-01-01
            -> data/X_derived/test_2025/
   es       x_post_unique, corpus twitterapi_es, originals + replies from 2022-06-01
            -> data/X_derived/es/
   fr       x_post_unique, corpus twitterapi_fr, originals + replies from 2022-06-01
-           -> data/X_derived/fr/ (added 2026-10-19; not in Amendment 1, so exploratory
-           until an amendment names it)
+           -> data/X_derived/fr/ (added 2026-10-19)
 
     uv run python -m h5n1.sources.x_posts build    [--stream S]   # posts.parquet, authors.parquet
     uv run python -m h5n1.sources.x_posts biobatch  --stream S    # bios needing an LLM label
@@ -44,8 +41,7 @@ media-hub rule (top 1% by hub-window volume AND no local stake):
   hub = hub-window post count in the top 1% of the stream's authors
         AND account_type NOT IN (farmer_keeper, ag_institution)
 The hub window is pre-2025 for prior and es. en_test has no pre-2025 posts (the corpus
-changes on 2025-01-01), so its window is all of its posts, and a prior-stream hub stays a hub
-(Amendment 1, item 1). Hubs are dropped from every signal feature. Media accounts below the
+changes on 2025-01-01), so its window is all of its posts, and a prior-stream hub stays a hub. Hubs are dropped from every signal feature. Media accounts below the
 volume cut are kept as their own stream (local outlets relaying a local story may carry
 signal); they are not pooled with the public.
 
@@ -77,7 +73,7 @@ STREAMS = {
 }
 OUT_DIR = XD  # set from --stream / --out in __main__
 
-# Spanish-only geography filter (Amendment 1, item 5): a profile naming another
+# Spanish-only geography filter: a profile naming another
 # Spanish-speaking country, or Baja California, is not a US location -- the geocoder reads
 # "Bogota, D.C., Colombia" as DC and "Tijuana, Baja California" as CA.
 ES_FOREIGN = re.compile(
@@ -156,7 +152,7 @@ def load_raw() -> pd.DataFrame:
 
 def load_db(corpus: str, start: str) -> pd.DataFrame:
     """x_post_unique rows for one twitterapi corpus, renamed to the CSV export's columns.
-    Originals and replies only: the prior cohort has no quote posts (Amendment 1, item 1)."""
+    Originals and replies only: the prior cohort has no quote posts."""
     from h5n1.db import get_engine
 
     sql = f"""
@@ -204,7 +200,7 @@ def build(stream: str = "prior") -> None:
     first = posts.assign(key=key).sort_values(["ts", "_id"], kind="stable").drop_duplicates("key")._id
     posts["copypasta_first"] = posts.copypasta & posts._id.isin(first)
 
-    # n_posts_train is the hub-window count (column name kept so the frozen prior files hash the same)
+    # n_posts_train is the hub-window count (column name kept from the first prior-stream build)
     tr = posts[posts.ts < TRAIN_END] if spec["hub_pre2025"] else posts
     authors = (posts.sort_values("ts").groupby("userId")
                .agg(userName=("userName", "last"), bio=("bio", "last"), userLocation=("userLocation", "last"),
@@ -238,7 +234,7 @@ def biobatch(stream: str, k: int = 5) -> None:
     """Write bios that need an LLM label -- ag-term bio or top-1% volume, not yet labelled --
     to labels/bio_batch_*.jsonl in the stream's directory, k interleaved batches."""
     if stream == "prior":
-        raise SystemExit("prior-stream labels are frozen; biobatch is for en_test / es")
+        raise SystemExit("prior-stream bios are already labelled; biobatch is for the other streams")
     a = pd.read_parquet(OUT_DIR / "authors.parquet")
     b = a.bio.fillna("").str.lower()
     ag = b.str.contains(FARM) | b.str.contains(INST)

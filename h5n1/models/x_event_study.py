@@ -27,14 +27,14 @@ of that target in the prior 30 days -- the early-warning question proper. All-ev
 mix in posts reacting to detections that already happened.
 
 Study period defaults to the exploratory span, 2022-06-01..2024-12-31 (train window). The
-confirmatory run (Amendment 1 of docs/x_event_preregistration.md, the primary test) is
+2025+ test-period run is
 
     DB_PORT=5433 uv run python -m h5n1.models.x_event_study events --start 2025-01-01 --end <last poultry date - 30>         --streams en_test --tag en_test
 
     DB_PORT=5433 uv run python -m h5n1.models.x_event_study            # event study
     DB_PORT=5433 uv run --extra modeling python -m h5n1.models.x_event_study regress  # sentiment models
-    ... regress --start 2025-01-01 --end 2026-06-13 --streams en_test               # confirmatory P1-P3
-    ... forest --start 2022-02-08 --end 2026-06-13 --train-end 2024-12-01 --test-start 2025-01-01 --ci 98.75 --streams prior,en_test  # P4
+    ... regress --start 2025-01-01 --end 2026-06-13 --streams en_test               # sentiment models, test period
+    ... forest --start 2022-02-08 --end 2026-06-13 --train-end 2024-12-01 --test-start 2025-01-01 --ci 98.75 --streams prior,en_test  # forest, out of time
 """
 from __future__ import annotations
 

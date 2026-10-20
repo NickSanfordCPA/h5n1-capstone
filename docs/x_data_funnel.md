@@ -117,8 +117,9 @@ every term that found the post is listed in `search_terms`.
 <summary>More detail and examples</summary>
 
 - **Which row is kept:** the row whose search term sorts first alphabetically. When the rows
-  are identical, even in their search term (969 French rows), they're numbered by `row_seq`
-  and row 1 is kept. The kept row is the only one that moves on to step 2.
+  share even their search term (969 French rows; some carry follower counts from a later
+  fetch), they're numbered by `row_seq` in a fixed order (an md5 hash of the raw record) and
+  row 1 is kept. The kept row is the only one that moves on to step 2.
 - The prior cohort ran one search per term and exported one CSV per term, so overlap is large:
   426,291 rows hold 364,259 distinct posts. In 973 of those posts the copies differ slightly
   (like counts captured at different times). The kept row is the one the pipeline used.
@@ -246,7 +247,7 @@ so their posts carry no local signal. All their posts are dropped.
 - The farm and ag exemption depends on the author's **account type** (`account_type`), and
   for some authors that is an **LLM decision**. Claude subagents labelled every top-1% author,
   and every author whose bio has a farm word, as farmer, ag institution, media or general
-  public (`account_type_source` = `llm_bio`). Everyone else was labelled by a simple word rule:
+  public (`account_type_source` = `llm_bio`), following the written guide in Appendix A below. Everyone else was labelled by a simple word rule:
   news words in the bio mean media, otherwise general public (`regex`).
 - `hub_author` is the flag.
 
@@ -296,9 +297,9 @@ fear and jokes are all "no". This step turns tens of thousands of posts into abo
 <summary>More detail and examples</summary>
 
 - Claude subagents (Sonnet) read every post in 500-post batches and answered questions 1 and 2
-  of the written guide (Appendix B of `docs/x_event_preregistration.md`) in one pass. The
-  answers are `local_obs` and `illness_seen`; source files are
-  `labels/full_review/labels_*.csv` in each stream's folder.
+  of the written guide (Appendix B below) in one pass. The answers are `local_obs` and
+  `illness_seen`; the working files are `labels/full_review/labels_*.csv` in each stream's
+  folder, made and merged with `h5n1/sources/x_topics.py`.
 - **Yes** includes sick or dead wild birds the author saw, their own flock affected, tested or
   kept indoors, a neighbour's farm quarantined, or a local closure they witnessed.
 - **Local news can count.** The guide counts "their town's park", so the reader treats a local
@@ -344,8 +345,8 @@ only the text, the author's state and the date, never the outbreak data.
 <details>
 <summary>More detail and examples</summary>
 
-The guide is Appendix C of `docs/x_event_preregistration.md`. The reason is in
-`exclusion_reason` (blank for kept posts); source files are
+The guide is Appendix C below. The reason is in
+`exclusion_reason` (blank for kept posts); the working files are
 `labels/full_review/excl_labels_*.csv` in each stream's folder. One reader read all of a
 stream's posts, so each rule is applied the same way throughout.
 
@@ -435,6 +436,13 @@ It holds everything the X analysis needs, so nothing else X-related has to be jo
 Sentiment input is `WHERE use_sentiment`; sightings are `WHERE use_sightings`. To rebuild:
 `uv run python -m h5n1.sources.x_analysis_table build`, then `load`.
 
+**The table is the record of the LLM labels.** A second reading would not give exactly the
+same answers, so `build` reads `local_obs`, `illness_seen`, `exclusion_reason` and
+`event_state` back from the table rather than from local files. A rebuild needs only the
+database, the raw prior-stream CSVs in `gs://h5n1-raw/X/`, and each stream's `x_posts`
+outputs. New readings of posts the table doesn't have yet go in `labels_extra*.csv` and
+`excl_labels_extra*.csv` in the stream's `labels/full_review/` folder.
+
 ## What this means
 
 - **Location is the biggest cut and the hardest limit.** Three-quarters of English posts, and
@@ -448,3 +456,61 @@ Sentiment input is `WHERE use_sentiment`; sightings are `WHERE use_sightings`. T
 - **Where judgement enters:** steps 8–14 are LLM decisions, the step 6 exemption uses LLM
   account types, and the step 5 word lists were written by reading the data. Every other step
   is a fixed rule that gives the same answer every time.
+
+## Appendix A — account types (step 6)
+
+One label per author, from the bio and display name:
+- `farmer_keeper`: a person or family operation that actually raises animals or crops.
+  - Includes farmers, ranchers, dairy/poultry/egg/turkey/hog growers, homesteaders,
+    backyard chicken or duck keepers, a farm spouse or kid describing their own farm, and
+    4-H/FFA youth.
+  - Excludes people who merely like farms or food, chefs, crypto "yield farming", "Ranch"
+    as a place name, and "beef" as slang.
+- `ag_institution`: organizations or professionals serving agriculture or animal health.
+  - Extension, state or federal ag departments, USDA/APHIS, state veterinarians,
+    individual veterinarians, ag colleges and scientists, farm bureaus, commodity boards
+    and producer associations, agribusiness companies, ag lenders, insurers and
+    consultants.
+- `media_aggregator`: news outlets, journalists, reporters, editors, TV/radio producers,
+  anchors, ag media, outbreak trackers, alert accounts and bots, newsletters, and bloggers
+  or podcasters whose account mainly relays news.
+- `general_public`: everyone else. This includes scientists and clinicians outside
+  agriculture, activists, politicians, and incidental ag words.
+
+Precedence rules:
+- An author who clearly farms is `farmer_keeper`.
+- An ag journalist is `media_aggregator`.
+- An ag vet is `ag_institution`.
+- An empty bio is judged by display name, else `general_public`.
+
+## Appendix B — local observation (steps 8 and 9)
+
+Two yes/no questions per post. The reader sees only the post text.
+
+1. `local_obs`: is the post mainly a firsthand or near-firsthand local observation?
+   - **Yes** if the author, or someone near them, saw or experienced it: family, a neighbor,
+     their farm, their town's park, their organization's own animals.
+   - That includes sick or dead wild birds or animals, sick or dying poultry or livestock,
+     their own flock or herd affected, tested or kept indoors, a neighbor's farm quarantined,
+     or a local closure they witnessed.
+   - **No** if the post relays an announcement, news, a case count, statistics, a policy
+     opinion, general fear or a joke.
+2. `illness_seen`: stricter.
+   - **Yes** only if it describes sick animals, dead animals, or a suspected or confirmed
+     infection among animals the author or their circle directly observed or owns.
+   - Precautions alone are **no**: birds kept inside, an aviary closed, a negative test.
+   - `illness_seen` implies `local_obs`.
+
+## Appendix C — exclusion screen (steps 10–14)
+
+For each `illness_seen` post. The reader sees the text, the author's profile state and the
+post date. Exclude a post, recording the reason, if it is:
+- `outside_us`: the described event is outside the US, whatever the author's profile says.
+- `retrospective`: the event happened more than about 30 days before the post, or it is a
+  general career or past-experience anecdote.
+- `not_hpai`: the author says it tested negative or is another disease.
+- `secondhand`: a report relayed from outside the author's state, with no local link.
+- `not_credible`: a joke, sarcasm, or a conspiracy claim presented as an observation.
+
+If the text names a different US state than the author's profile, the event is assigned to
+the named state.

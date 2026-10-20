@@ -7,11 +7,16 @@ sentiment and labels -- the one X table the analysis reads.
 One row per x_post row (603,265). Each row gets the FIRST funnel step that removes it, named
 exactly as in docs/x_data_funnel.md, or "Sighting" if it survives every step. The steps are
 recomputed here from x_post and the stream rules (geocoder, word lists, hub rule, copypasta
-key); LLM decisions come from the labels under each stream's labels/full_review/.
+key). LLM decisions are read back from this table itself, the labels' record of truth: a
+rebuild needs only the database, the gs://h5n1-raw/X/ CSVs and each stream's x_posts
+outputs. The label files under labels/full_review/ seed the first build, and *_extra*.csv
+there add readings of posts the table doesn't have yet (see h5n1/sources/x_topics.py).
 
 DETERMINISTIC TIE-BREAKS (every "keep one, drop the rest" step):
   1  Duplicate search result  rows of one collector sharing a post ID: keep the row whose search
-                              term sorts first; identical rows are numbered by row_seq, keep 1.
+                              term sorts first; repeat rows of one search term (fr only, some
+                              with follower counts from a later fetch) are numbered by row_seq
+                              in md5(raw) order, keep 1.
                               For the prior stream this is the row its CSV build kept.
   7  Copypasta repeat         keep the earliest post of the group, ties by smallest post ID.
   15 Same state-week          keep the earliest sighting post, ties by smallest post ID.
@@ -95,7 +100,8 @@ def load_rows() -> pd.DataFrame:
 
     rows = pd.read_sql("""
         SELECT corpus, post_id, source_query,
-               row_number() OVER (PARTITION BY corpus, post_id, source_query) AS row_seq,
+               row_number() OVER (PARTITION BY corpus, post_id, source_query
+                                  ORDER BY md5(raw::text)) AS row_seq,
                created_at, post_type, lang, post_text, url, user_id, user_name, alias, user_location,
                followers, verified, retweets, favorites, replies, impressions
           FROM x_post""", get_engine())
@@ -123,18 +129,41 @@ def locate(rows: pd.DataFrame) -> pd.DataFrame:
     return rows
 
 
+def table_labels(stream: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """The stream's LLM labels as stored in x_post_analysis, shaped like the label files.
+    The table is the labels' record of truth: the readings can't be reproduced exactly."""
+    from sqlalchemy import inspect, text
+
+    from h5n1.db import get_engine
+
+    eng = get_engine()
+    if not inspect(eng).has_table(TABLE):
+        return pd.DataFrame(), pd.DataFrame()
+    t = pd.read_sql(text(f"SELECT DISTINCT post_id AS _id, local_obs, illness_seen, exclusion_reason, "
+                         f"event_state FROM {TABLE} WHERE stream = :s AND local_obs IS NOT NULL"),
+                    eng, params={"s": stream})
+    if t._id.duplicated().any():
+        raise ValueError(f"{stream}: a post has two different labels in {TABLE}")
+    ex = t[t.illness_seen].assign(exclude=lambda d: d.exclusion_reason.fillna(""))
+    return t[["_id", "local_obs", "illness_seen"]], ex[["_id", "exclude", "event_state"]]
+
+
 def labels(stream: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Labels from x_post_analysis; from the stream's label files only when the table has none
+    (the first build). Either way, *_extra*.csv files add readings of posts not yet in it."""
     fr = STREAMS[stream]["out"] / "labels" / "full_review"
-    lab = pd.read_parquet(fr / "labels_all.parquet")[["_id", "local_obs", "illness_seen"]]
+    lab, ex = table_labels(stream)
+    if lab.empty:
+        lab = pd.read_parquet(fr / "labels_all.parquet")[["_id", "local_obs", "illness_seen"]]
+        ex_path = fr / "illness_posts_screened.parquet"
+        ex = (pd.read_parquet(ex_path)[["_id", "exclude", "event_state"]] if ex_path.exists()
+              else pd.DataFrame(columns=["_id", "exclude", "event_state"]))
     extra = sorted(fr.glob("labels_extra*.csv"))
     if extra:
         e = pd.concat(pd.read_csv(f, dtype=str) for f in extra)
         for c in ("local_obs", "illness_seen"):
             e[c] = e[c].str.strip().str.lower().map({"yes": True, "no": False})
         lab = pd.concat([lab, e[lab.columns]]).drop_duplicates("_id", keep="last")
-    ex_path = fr / "illness_posts_screened.parquet"
-    ex = (pd.read_parquet(ex_path)[["_id", "exclude", "event_state"]] if ex_path.exists()
-          else pd.DataFrame(columns=["_id", "exclude", "event_state"]))
     extra = sorted(fr.glob("excl_labels_extra*.csv"))
     if extra:
         e = pd.concat(pd.read_csv(f, dtype=str, keep_default_na=False) for f in extra)
