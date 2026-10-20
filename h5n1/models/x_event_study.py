@@ -1,11 +1,12 @@
 """Event study: do firsthand X reports of sick/dead animals precede APHIS detections?
 
-EVENTS. The illness_seen posts from x_topics (firsthand report of sick/dead animals or a
-suspected infection), after a manual screen (labels/illness_posts_screened.parquet) that drops
-events outside the US, retrospective anecdotes, tested-negative / not-HPAI, secondhand reports
-from another state, and two non-credible posts. Geography is the event state (the author's
-profile state unless the text names another). One event per state per ISO week (the
-earliest post), so one die-off posted about three times counts once.
+EVENTS. The Sighting rows of x_post_analysis (use_sightings) for the --streams chosen: firsthand
+reports of sick/dead animals that passed the exclusion screen (outside the US, retrospective,
+not HPAI, secondhand from another state, not credible). Geography is the event state (the
+author's profile state unless the text names another). One event per state per ISO week (the
+earliest post, ties by smallest post ID), so one die-off posted about three times counts once.
+Sentiment comes from the same streams' filtered subset (use_sentiment). docs/x_data_funnel.md
+has every step.
 
 OUTCOMES, per target, at state x day:
   poultry  any row in fact_h5n1_outbreak (the model's DV table), dated by Confirmed Diagnosis
@@ -28,12 +29,12 @@ mix in posts reacting to detections that already happened.
 Study period defaults to the exploratory span, 2022-06-01..2024-12-31 (train window). The
 confirmatory run (Amendment 1 of docs/x_event_preregistration.md, the primary test) is
 
-    DB_PORT=5433 uv run python -m h5n1.models.x_event_study events --start 2025-01-01 --end <last poultry date - 30>         --events data/X_derived/test_2025/labels/illness_posts_screened.parquet --tag en_test
+    DB_PORT=5433 uv run python -m h5n1.models.x_event_study events --start 2025-01-01 --end <last poultry date - 30>         --streams en_test --tag en_test
 
     DB_PORT=5433 uv run python -m h5n1.models.x_event_study            # event study
     DB_PORT=5433 uv run --extra modeling python -m h5n1.models.x_event_study regress  # sentiment models
-    ... regress --start 2025-01-01 --end 2026-06-13                                 # confirmatory P1-P3
-    ... forest --start 2022-02-08 --end 2026-06-13 --train-end 2024-12-01 --test-start 2025-01-01 --ci 98.75  # P4
+    ... regress --start 2025-01-01 --end 2026-06-13 --streams en_test               # confirmatory P1-P3
+    ... forest --start 2022-02-08 --end 2026-06-13 --train-end 2024-12-01 --test-start 2025-01-01 --ci 98.75 --streams prior,en_test  # P4
 """
 from __future__ import annotations
 
@@ -43,29 +44,25 @@ import numpy as np
 import pandas as pd
 
 from h5n1.db import get_engine
+from h5n1.sources.x_analysis_table import sentiment_posts, sightings
 from h5n1.sources.x_location import FIPS_STATE
-from h5n1.sources.x_posts import waree_sentiment
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-LAB = ROOT / "data" / "X_derived" / "labels"
 OUT = ROOT / "data" / "X_derived" / "event_study"
 START, END = pd.Timestamp("2022-06-01"), pd.Timestamp("2024-12-31")
 KS = (7, 14, 30)
 ONSET_LOOKBACK = 30
 N_PERM, N_BOOT, SEASON_HALFWIDTH = 2000, 2000, 15
 STATES = sorted(FIPS_STATE.values())
-EVENTS = LAB / "illness_posts_screened.parquet"  # --events; Amendment 1 points it at a stream's file
+X_STREAMS = ["prior"]  # --streams: x_post_analysis streams for events and sentiment
 TAG = ""  # --tag, appended to output names so streams sharing a window don't overwrite each other
 
 
 def load_events() -> pd.DataFrame:
-    ev = pd.read_parquet(EVENTS)
-    ev = ev[ev.exclude == ""].copy()
+    ev = sightings(X_STREAMS)
     ev["day"] = ev.ts.dt.tz_convert(None).dt.normalize()
-    ev["week"] = ev.day.dt.to_period("W")
-    ev = ev.sort_values("day").drop_duplicates(["event_state", "week"])
     ev = ev[ev.day.between(START, END)]  # events outside the window would add rows via .at
-    return ev[ev.event_state.isin(STATES)][["_id", "event_state", "day"]].rename(columns={"event_state": "state"})
+    return ev[ev.state.isin(STATES)][["_id", "state", "day"]]
 
 
 def load_detections() -> dict[str, pd.DataFrame]:
@@ -142,9 +139,7 @@ SENT_WINDOW = 7
 def state_day_sentiment() -> pd.DataFrame:
     """Trailing SENT_WINDOW-day mean sentiment and post count per state-day, from the topic
     subset (state-geocoded, hubs and non-first copypasta removed), days x states."""
-    X = ROOT / "data" / "X_derived"
-    p = pd.read_parquet(X / "topic_subset.parquet", columns=["_id", "state", "ts", "account_type"]).merge(
-        waree_sentiment(), on="_id")
+    p = sentiment_posts(X_STREAMS)
     p["day"] = p.ts.dt.tz_convert(None).dt.normalize()
     days = pd.date_range(START - pd.Timedelta(days=SENT_WINDOW), END)
     s = p.pivot_table(index="day", columns="state", values="sentiment", aggfunc="sum").reindex(
@@ -373,11 +368,11 @@ if __name__ == "__main__":
     ap.add_argument("--train-end", default="2023-11-30")    # forest step only
     ap.add_argument("--test-start", default="2024-01-01")   # forest step only
     ap.add_argument("--ci", type=float, default=95.0)       # forest step only
-    ap.add_argument("--events", default=str(EVENTS))
+    ap.add_argument("--streams", default=",".join(X_STREAMS), help="comma list: prior, en_test, es, fr")
     ap.add_argument("--tag", default="")
     a = ap.parse_args()
     START, END = pd.Timestamp(a.start), pd.Timestamp(a.end)  # module globals read by every step
-    EVENTS, TAG = pathlib.Path(a.events), (f"_{a.tag}" if a.tag else "")
+    X_STREAMS, TAG = a.streams.split(","), (f"_{a.tag}" if a.tag else "")
     if a.step == "forest":
         main_forest(a.train_end, a.test_start, a.ci)
     else:

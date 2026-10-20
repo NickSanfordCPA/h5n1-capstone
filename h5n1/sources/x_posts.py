@@ -199,7 +199,9 @@ def build(stream: str = "prior") -> None:
     grp = posts.assign(key=key).groupby("key")
     n_posts, n_auth = grp._id.transform("size"), grp.userId.transform("nunique")
     posts["copypasta"] = (n_posts >= COPYPASTA_MIN) & (n_auth >= 2) & (key.str.len() >= 20)
-    first = posts.assign(key=key).sort_values("ts").drop_duplicates("key")._id
+    # earliest post, ties by smallest _id (x_analysis_table uses the same rule; files built
+    # before 2026-10-19 broke timestamp ties arbitrarily)
+    first = posts.assign(key=key).sort_values(["ts", "_id"], kind="stable").drop_duplicates("key")._id
     posts["copypasta_first"] = posts.copypasta & posts._id.isin(first)
 
     # n_posts_train is the hub-window count (column name kept so the frozen prior files hash the same)

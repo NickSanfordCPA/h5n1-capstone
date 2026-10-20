@@ -19,12 +19,12 @@ k=14 and 30 are the same rule over longer windows. For each k the training set i
 positives plus the hash-sampled rows, so a row kept only because another horizon is positive
 never enters as an unweighted negative.
 
-X FEATURES (state, broadcast to every county in the state; past-only, windows end at d):
-  x_firsthand_30d  count of screened, state-week-deduplicated firsthand illness reports in
-                   the state over [d-29, d]
-  x_sent_7d        mean sentiment (p_pos - p_neg) of the state's subset posts over [d-6, d];
-                   filled with the training mean where the state had no posts. Waree's
-                   x_post_sentiment (XLM-R); posts it hasn't scored are left out.
+X FEATURES (state, broadcast to every county in the state; past-only, windows end at d), read
+from x_post_analysis for the chosen streams:
+  x_firsthand_30d  count of Sighting rows (use_sightings) in the state over [d-29, d]
+  x_sent_7d        mean sentiment (p_pos - p_neg) of the state's filtered-subset posts
+                   (use_sentiment) over [d-6, d]; filled with the training mean where the state
+                   had no posts. Waree's x_post_sentiment (XLM-R); unscored posts are left out.
   *_es             the same two from the Spanish stream (--es), for arms A +ES and D +X +ES.
 Media share is deliberately excluded: it measures news mix, and news (GDELT) was already null.
 
@@ -34,8 +34,8 @@ EVALUATION: PR-AUC on the test year, all positives and the new-onset slice
     DB_PORT=5433 uv run --extra modeling python -m h5n1.models.x_lift          # exploratory (2024 test)
 
 The registered forest test as Amendment 1 of docs/x_event_preregistration.md runs it --
-reported, but labelled confounded by the 2025-01-01 collection change. The frozen prior stream
-supplies training-period features and test_2025 the test period's:
+reported, but labelled confounded by the 2025-01-01 collection change. The prior stream
+supplies training-period features and en_test the test period's:
 
     DB_PORT=5433 uv run --extra modeling python -m h5n1.models.x_lift --train-start 2022-07-01 --test-start 2025-01-01 --test-end 2026-12-31 --boot 2000 --ci 99.1667 --en-test --tag confirmatory
     ... the same with --es --tag confirmatory_es                 # Spanish secondaries (item 5)
@@ -53,7 +53,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import average_precision_score, roc_auc_score
 
 from h5n1.db import get_engine
-from h5n1.sources.x_posts import waree_sentiment
+from h5n1.sources.x_analysis_table import sentiment_posts, sightings
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 XD = ROOT / "data" / "X_derived"
@@ -88,19 +88,15 @@ def load_panel() -> pd.DataFrame:
     return df
 
 
-def x_state_features(dirs: list[pathlib.Path], suffix: str = "") -> pd.DataFrame:
-    """(state, day) -> x_firsthand_30d{suffix}, x_sent_7d{suffix}, pooling the stream
-    directories' events and subset posts (e.g. the frozen prior stream + test_2025)."""
+def x_state_features(streams: list[str], suffix: str = "") -> pd.DataFrame:
+    """(state, day) -> x_firsthand_30d{suffix}, x_sent_7d{suffix}, pooling the x_post_analysis
+    streams' sightings and subset posts (e.g. prior + en_test)."""
     days = pd.date_range(pd.Timestamp(TRAIN_START) - pd.Timedelta(days=30), TEST_END)
-    ev = pd.concat(pd.read_parquet(d / "labels" / "illness_posts_screened.parquet") for d in dirs)
-    ev = ev[ev.exclude == ""].copy()
+    ev = sightings(streams)
     ev["day"] = ev.ts.dt.tz_convert(None).dt.normalize()
-    ev = ev.assign(week=ev.day.dt.to_period("W")).sort_values("day").drop_duplicates(["event_state", "week"])
-    fh = (ev.groupby(["day", "event_state"]).size().unstack(fill_value=0)
+    fh = (ev.groupby(["day", "state"]).size().unstack(fill_value=0)
           .reindex(days, fill_value=0).rolling(30, min_periods=1).sum())
-    scores = waree_sentiment()
-    p = pd.concat(pd.read_parquet(d / "topic_subset.parquet", columns=["_id", "state", "ts"]).merge(
-        scores, on="_id") for d in dirs)
+    p = sentiment_posts(streams)
     p["day"] = p.ts.dt.tz_convert(None).dt.normalize()
     s = p.pivot_table(index="day", columns="state", values="sentiment", aggfunc="sum").reindex(days).fillna(0)
     n = p.pivot_table(index="day", columns="state", values="_id", aggfunc="count").reindex(days).fillna(0)
@@ -148,11 +144,11 @@ def paired_boot(y, pa, pb, wk, rng, n_boot=N_BOOT, ci=95.0):
 
 
 def main(n_boot: int = N_BOOT, ci: float = 95.0, tag: str = "exploratory_2024",
-         en_dirs: list[pathlib.Path] = (XD,), es_dirs: list[pathlib.Path] = (), z: bool = False) -> None:
-    df = load_panel().merge(x_state_features(list(en_dirs)), on=["state", "day"], how="left")
-    xcols_es = [f"{c}_es" for c in X_COLS] if es_dirs else []
-    if es_dirs:
-        df = df.merge(x_state_features(list(es_dirs), "_es"), on=["state", "day"], how="left")
+         en_streams: list[str] = ("prior",), es_streams: list[str] = (), z: bool = False) -> None:
+    df = load_panel().merge(x_state_features(list(en_streams)), on=["state", "day"], how="left")
+    xcols_es = [f"{c}_es" for c in X_COLS] if es_streams else []
+    if es_streams:
+        df = df.merge(x_state_features(list(es_streams), "_es"), on=["state", "day"], how="left")
     max_day = pd.read_sql("SELECT max(day) AS d FROM fact_h5n1_outbreak", get_engine(),
                           parse_dates=["d"]).d.iloc[0]
     base = [c for c in df.columns if c not in KEYS | set(X_COLS + xcols_es) | {"y7", "y14", "y30", "hashed"}]
@@ -161,7 +157,7 @@ def main(n_boot: int = N_BOOT, ci: float = 95.0, tag: str = "exploratory_2024",
     # (new arm, reference arm, CI level): B - A is the registered comparison; the Spanish
     # ones are Amendment 1 item 5 secondaries, reported at 95% with no correction
     comps = [("B +X", "A baseline", ci)]
-    if es_dirs:
+    if es_streams:
         arms |= {"A +ES": base + xcols_es, "D +X +ES": base + X_COLS + xcols_es}
         comps += [("D +X +ES", "B +X", 95.0), ("A +ES", "A baseline", 95.0)]
     rng = np.random.default_rng(RANDOM_STATE)
@@ -232,5 +228,5 @@ if __name__ == "__main__":
     ap.add_argument("--standardize", action="store_true", help="z-score X features within each period")
     a = ap.parse_args()
     TRAIN_START, TEST_START, TEST_END = a.train_start, a.test_start, a.test_end  # module globals
-    en = [XD] + ([XD / "test_2025"] if a.en_test else [])
-    main(a.boot, a.ci, a.tag, en, [XD / "es"] if a.es else [], a.standardize)
+    en = ["prior"] + (["en_test"] if a.en_test else [])
+    main(a.boot, a.ci, a.tag, en, ["es"] if a.es else [], a.standardize)
