@@ -19,11 +19,13 @@ k=14 and 30 are the same rule over longer windows. For each k the training set i
 positives plus the hash-sampled rows, so a row kept only because another horizon is positive
 never enters as an unweighted negative.
 
-X FEATURES (state, broadcast to every county in the state; past-only, windows end at d):
-  x_firsthand_30d  count of screened, state-week-deduplicated firsthand illness reports in
-                   the state over [d-29, d]
-  x_sent_7d        mean TweetEval sentiment of the state's subset posts over [d-6, d];
-                   filled with the training mean where the state had no posts
+X FEATURES (state, broadcast to every county in the state; past-only, windows end at d), read
+from x_post_analysis for the chosen streams:
+  x_firsthand_30d  count of Sighting rows (use_sightings) in the state over [d-29, d]
+  x_sent_7d        mean sentiment (p_pos - p_neg) of the state's filtered-subset posts
+                   (use_sentiment) over [d-6, d]; filled with the training mean where the state
+                   had no posts. Waree's x_post_sentiment (XLM-R); unscored posts are left out.
+  *_es             the same two from the Spanish stream (--es), for arms A +ES and D +X +ES.
 Media share is deliberately excluded: it measures news mix, and news (GDELT) was already null.
 
 EVALUATION: PR-AUC on the test year, all positives and the new-onset slice
@@ -31,9 +33,12 @@ EVALUATION: PR-AUC on the test year, all positives and the new-onset slice
 
     DB_PORT=5433 uv run --extra modeling python -m h5n1.models.x_lift          # exploratory (2024 test)
 
-The pre-registered confirmatory run (docs/x_event_preregistration.md) on the full repull:
+The 2025+ test-period run. Read it as confounded by the 2025-01-01 collection change: the
+prior stream supplies training-period features and en_test the test period's.
 
-    DB_PORT=5433 uv run --extra modeling python -m h5n1.models.x_lift --train-start 2022-02-08 --test-start 2025-01-01 --test-end 2026-12-31 --boot 2000 --ci 99.1667 --tag confirmatory
+    DB_PORT=5433 uv run --extra modeling python -m h5n1.models.x_lift --train-start 2022-07-01 --test-start 2025-01-01 --test-end 2026-12-31 --boot 2000 --ci 99.1667 --en-test --tag confirmatory
+    ... the same with --es --tag confirmatory_es                 # Spanish arms
+    ... the same with --standardize --tag confirmatory_z         # within-period z-scores
 
 Test rows are further limited per horizon to d + k <= the last loaded confirmation date.
 """
@@ -47,6 +52,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import average_precision_score, roc_auc_score
 
 from h5n1.db import get_engine
+from h5n1.sources.x_analysis_table import sentiment_posts, sightings
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 XD = ROOT / "data" / "X_derived"
@@ -81,36 +87,45 @@ def load_panel() -> pd.DataFrame:
     return df
 
 
-def x_state_features() -> pd.DataFrame:
-    """(state, day) -> x_firsthand_30d, x_sent_7d."""
+def x_state_features(streams: list[str], suffix: str = "") -> pd.DataFrame:
+    """(state, day) -> x_firsthand_30d{suffix}, x_sent_7d{suffix}, pooling the x_post_analysis
+    streams' sightings and subset posts (e.g. prior + en_test)."""
     days = pd.date_range(pd.Timestamp(TRAIN_START) - pd.Timedelta(days=30), TEST_END)
-    ev = pd.read_parquet(XD / "labels" / "illness_posts_screened.parquet")
-    ev = ev[ev.exclude == ""].copy()
+    ev = sightings(streams)
     ev["day"] = ev.ts.dt.tz_convert(None).dt.normalize()
-    ev = ev.assign(week=ev.day.dt.to_period("W")).sort_values("day").drop_duplicates(["event_state", "week"])
-    fh = (ev.groupby(["day", "event_state"]).size().unstack(fill_value=0)
+    fh = (ev.groupby(["day", "state"]).size().unstack(fill_value=0)
           .reindex(days, fill_value=0).rolling(30, min_periods=1).sum())
-    p = pd.read_parquet(XD / "topic_subset.parquet", columns=["_id", "state", "ts"]).merge(
-        pd.read_parquet(XD / "sentiment_subset.parquet", columns=["_id", "sentiment"]), on="_id")
+    p = sentiment_posts(streams)
     p["day"] = p.ts.dt.tz_convert(None).dt.normalize()
     s = p.pivot_table(index="day", columns="state", values="sentiment", aggfunc="sum").reindex(days).fillna(0)
     n = p.pivot_table(index="day", columns="state", values="_id", aggfunc="count").reindex(days).fillna(0)
     sent = s.rolling(7, min_periods=1).sum() / n.rolling(7, min_periods=1).sum().where(lambda v: v > 0)
-    out = pd.DataFrame({"x_firsthand_30d": fh.stack(), "x_sent_7d": sent.stack()}).reset_index()
-    out.columns = ["day", "state", "x_firsthand_30d", "x_sent_7d"]
+    out = pd.DataFrame({f"x_firsthand_30d{suffix}": fh.stack(), f"x_sent_7d{suffix}": sent.stack()}).reset_index()
+    out.columns = ["day", "state", f"x_firsthand_30d{suffix}", f"x_sent_7d{suffix}"]
     return out
 
 
-def prepare(df: pd.DataFrame, base: list[str], train: np.ndarray) -> pd.DataFrame:
-    X = df[base + X_COLS].copy()
+def prepare(df: pd.DataFrame, base: list[str], xcols: list[str], train: np.ndarray) -> pd.DataFrame:
+    X = df[base + xcols].copy()
     for c in ["temp_min_7d_c", "temp_max_7d_c", "precip_7d_mm", "log_layer_inventory"]:
         X[c] = X[c].fillna(X.loc[train, c].median())
     for c in ["days_since_outbreak_county", "days_since_outbreak_neighbor"]:
         X[c] = X[c].fillna(4.0)
-    X["x_firsthand_30d"] = X.x_firsthand_30d.fillna(0)
-    X["x_sent_7d"] = X.x_sent_7d.fillna(X.loc[train, "x_sent_7d"].mean())
+    for c in xcols:
+        X[c] = X[c].fillna(0) if c.startswith("x_firsthand") else X[c].fillna(X.loc[train, c].mean())
     left = X.columns[X.isna().any()].tolist()
     assert not left, f"unexpected NULLs: {left}"
+    return X
+
+
+def standardize(X: pd.DataFrame, xcols: list[str], masks: list[np.ndarray]) -> pd.DataFrame:
+    """Z-score each X feature within each period (train rows by the
+    training period's mean and SD, test rows by the test period's). X values only, no outcomes."""
+    X = X.copy()
+    for c in xcols:
+        for m in masks:
+            v = X.loc[m, c]
+            X.loc[m, c] = (v - v.mean()) / (v.std() or 1.0)
     return X
 
 
@@ -127,12 +142,23 @@ def paired_boot(y, pa, pb, wk, rng, n_boot=N_BOOT, ci=95.0):
     return np.percentile(d, tail), np.percentile(d, 100 - tail), (d > 0).mean()
 
 
-def main(n_boot: int = N_BOOT, ci: float = 95.0, tag: str = "exploratory_2024") -> None:
-    df = load_panel().merge(x_state_features(), on=["state", "day"], how="left")
+def main(n_boot: int = N_BOOT, ci: float = 95.0, tag: str = "exploratory_2024",
+         en_streams: list[str] = ("prior",), es_streams: list[str] = (), z: bool = False) -> None:
+    df = load_panel().merge(x_state_features(list(en_streams)), on=["state", "day"], how="left")
+    xcols_es = [f"{c}_es" for c in X_COLS] if es_streams else []
+    if es_streams:
+        df = df.merge(x_state_features(list(es_streams), "_es"), on=["state", "day"], how="left")
     max_day = pd.read_sql("SELECT max(day) AS d FROM fact_h5n1_outbreak", get_engine(),
                           parse_dates=["d"]).d.iloc[0]
-    base = [c for c in df.columns if c not in KEYS | set(X_COLS) | {"y7", "y14", "y30", "hashed"}]
+    base = [c for c in df.columns if c not in KEYS | set(X_COLS + xcols_es) | {"y7", "y14", "y30", "hashed"}]
     assert len(base) == 23, base
+    arms = {"A baseline": base, "B +X": base + X_COLS}
+    # (new arm, reference arm, CI level): B - A is the main comparison; the Spanish
+    # ones are secondaries, reported at 95% with no correction
+    comps = [("B +X", "A baseline", ci)]
+    if es_streams:
+        arms |= {"A +ES": base + xcols_es, "D +X +ES": base + X_COLS + xcols_es}
+        comps += [("D +X +ES", "B +X", 95.0), ("A +ES", "A baseline", 95.0)]
     rng = np.random.default_rng(RANDOM_STATE)
     rows, imps = [], []
     for k in KS:
@@ -142,42 +168,47 @@ def main(n_boot: int = N_BOOT, ci: float = 95.0, tag: str = "exploratory_2024") 
         # outcome window must be fully loaded: d + k <= last confirmation date (cf. target_complete_7d)
         test = ((df.day >= TEST_START) & (df.day <= TEST_END)
                 & (df.day + pd.Timedelta(days=k) <= max_day)).to_numpy()
-        X = prepare(df, base, train)
+        X = prepare(df, base, X_COLS + xcols_es, train)
+        if z:
+            X = standardize(X, X_COLS + xcols_es, [train, test])
         w = np.where(yk[train] == 1, 1.0, 1.0 / NEG_SAMPLE_RATE)
         y_te = yk[test]
         preds = {}
-        for arm, cols in {"A baseline": base, "B +X": base + X_COLS}.items():
+        for arm, cols in arms.items():
             ps = []
+            xc = [c for c in cols if c not in base]
             for seed in SEEDS:
                 rf = RandomForestClassifier(random_state=seed, **RF_PARAMS)
                 rf.fit(X.loc[train, cols], yk[train], sample_weight=w)
                 ps.append(rf.predict_proba(X.loc[test, cols])[:, 1])
-                if seed == SEEDS[0] and arm == "B +X":
+                if seed == SEEDS[0] and xc:
                     imp = pd.Series(rf.feature_importances_, index=cols)
-                    imps.append({"k": k, **imp[X_COLS].round(5).to_dict(),
-                                 "x_share": round(imp[X_COLS].sum(), 5),
-                                 "x_rank": [int((imp > imp[c]).sum()) + 1 for c in X_COLS]})
+                    imps.append({"k": k, "arm": arm, **imp[xc].round(5).to_dict(),
+                                 "x_share": round(imp[xc].sum(), 5),
+                                 "x_rank": [int((imp > imp[c]).sum()) + 1 for c in xc]})
             preds[arm] = np.mean(ps, axis=0)
         wk = df.loc[test, "day"].dt.to_period("W").astype(str).to_numpy()
         onset = df.loc[test, "log_own_outbreaks_60d"].to_numpy() == 0
-        for sl, m in {"all": np.ones_like(onset), "new_onset": onset}.items():
-            yy = y_te[m]
-            pa, pb = preds["B +X"][m], preds["A baseline"][m]
-            lo, hi, pgt = paired_boot(yy, pa, pb, wk[m], rng, n_boot, ci)
-            ap_a, ap_b = average_precision_score(yy, pb), average_precision_score(yy, pa)
-            rows.append({"k": k, "slice": sl, "test_rows": int(m.sum()), "positives": int(yy.sum()),
-                         "base_rate": yy.mean(), "pr_auc_A": ap_a, "pr_auc_B": ap_b, "lift_A_x": ap_a / yy.mean(),
-                         "delta": ap_b - ap_a, "d_lo": lo, "d_hi": hi, "P(d>0)": pgt,
-                         "roc_A": roc_auc_score(yy, pb), "roc_B": roc_auc_score(yy, pa)})
+        for new, ref, level in comps:
+            for sl, m in {"all": np.ones_like(onset), "new_onset": onset}.items():
+                yy = y_te[m]
+                pa, pb = preds[new][m], preds[ref][m]
+                lo, hi, pgt = paired_boot(yy, pa, pb, wk[m], rng, n_boot, level)
+                ap_a, ap_b = average_precision_score(yy, pb), average_precision_score(yy, pa)
+                rows.append({"comparison": f"{new} vs {ref}", "k": k, "slice": sl, "test_rows": int(m.sum()),
+                             "positives": int(yy.sum()), "base_rate": yy.mean(), "pr_auc_A": ap_a,
+                             "pr_auc_B": ap_b, "lift_A_x": ap_a / yy.mean(), "delta": ap_b - ap_a,
+                             "d_lo": lo, "d_hi": hi, "ci_level": level, "P(d>0)": pgt,
+                             "roc_A": roc_auc_score(yy, pb), "roc_B": roc_auc_score(yy, pa)})
         print(f"k={k} done: train rows {train.sum():,} ({int(yk[train].sum())} pos), test {test.sum():,}", flush=True)
     res = pd.DataFrame(rows)
     OUT.mkdir(parents=True, exist_ok=True)
-    res.assign(ci_level=ci, n_boot=n_boot, train_start=TRAIN_START, test_start=TEST_START,
-               test_end=TEST_END, outbreak_max_day=max_day.date()).to_csv(
+    res.assign(n_boot=n_boot, train_start=TRAIN_START, test_start=TEST_START, test_end=TEST_END,
+               sentiment="x_post_sentiment", standardized=z, outbreak_max_day=max_day.date()).to_csv(
         OUT / f"x_lift_production_baseline_{tag}.csv", index=False)
     pd.set_option("display.width", 220)
     print(res.round(4).to_string(index=False))
-    print("\nX feature impurity importance in arm B (seed 1), rank among 25:")
+    print("\nX feature impurity importance (seed 1); pr_auc_A / pr_auc_B are the reference / new arm:")
     print(pd.DataFrame(imps).to_string(index=False))
 
 
@@ -191,6 +222,10 @@ if __name__ == "__main__":
     ap.add_argument("--boot", type=int, default=N_BOOT)
     ap.add_argument("--ci", type=float, default=95.0)
     ap.add_argument("--tag", default="exploratory_2024")
+    ap.add_argument("--en-test", action="store_true", help="add the test_2025 English stream to the prior one")
+    ap.add_argument("--es", action="store_true", help="add the Spanish arms (A +ES, D +X +ES)")
+    ap.add_argument("--standardize", action="store_true", help="z-score X features within each period")
     a = ap.parse_args()
     TRAIN_START, TEST_START, TEST_END = a.train_start, a.test_start, a.test_end  # module globals
-    main(a.boot, a.ci, a.tag)
+    en = ["prior"] + (["en_test"] if a.en_test else [])
+    main(a.boot, a.ci, a.tag, en, ["es"] if a.es else [], a.standardize)
