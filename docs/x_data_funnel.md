@@ -74,31 +74,31 @@ Steps 2, 3 and 5 remove nothing in the prior stream, so they aren't drawn.
 Rows in **bold** are what remains; the other rows are the rows removed at that step. A dash
 means the step doesn't apply to that stream.
 
-| # | Disposition | What it means | Technique | prior | en_test | es | fr |
-|---|---|---|---|---:|---:|---:|---:|
-| | **Rows collected** | | | **426,291** | **78,591** | **76,631** | **21,752** |
-| 1 | Duplicate search result | Same post returned by more than one search | ID match | 62,032 | 0 | 0 | 969 |
-| 2 | Outside date window | Posted outside the stream's dates | Metadata rule | 0 | 15,386 | 7,031 | 3,836 |
-| 3 | Quote post | A quote of another post | Metadata rule | 0 | 5,153 | 4,245 | 1,761 |
-| | **Posts in the stream** | | | **364,259** | **58,052** | **65,355** | **15,186** |
-| 4 | No US state | Profile location doesn't resolve to one US state | Word mapping | 273,480 | 44,963 | 64,145 | 15,011 |
-| 5 | Foreign place name | Profile names a place outside the US in the stream's language area | Word list | — | — | 360 | 34 |
-| | **Placed in a US state** | | | **90,779** | **13,089** | **850** | **141** |
-| 6 | Hub author | Top 1% by volume, not farm or ag | Counting rule | 26,479 | 4,610 | 67 | 0 |
-| 7 | Copypasta repeat | Later copy of a mass-posted text | Text fingerprint | 6,379 | 351 | 19 | 1 |
-| | **Filtered subset** (`use_sentiment`) | | | **57,921** | **8,128** | **764** | **140** |
-| 8 | Not a local observation | Not firsthand or near-firsthand | LLM decision | 56,939 | 7,957 | 762 | 139 |
-| | **Local observations** | | | **982** | **171** | **2** | **1** |
-| 9 | No sick or dead animals | Local, but no illness seen | LLM decision | 632 | 86 | 1 | 1 |
-| | **Sick or dead animals seen** | | | **350** | **85** | **1** | **0** |
-| 10 | Retrospective | Event more than ~30 days before the post | LLM decision | 51 | 8 | 0 | — |
-| 11 | Outside the US | Event is outside the US | LLM decision | 23 | 2 | 0 | — |
-| 12 | Not HPAI | Tested negative, or another disease | LLM decision | 6 | 0 | 0 | — |
-| 13 | Secondhand | Relayed from outside the author's state | LLM decision | 48 | 1 | 0 | — |
-| 14 | Not credible | Joke, sarcasm or conspiracy | LLM decision | 4 | 1 | 0 | — |
-| | **Event posts** | | | **218** | **73** | **1** | **0** |
-| 15 | Same state-week | Same state and week as an earlier sighting | Counting rule | 38 | 11 | 0 | — |
-| | **Sighting** (`use_sightings`) | | | **180** | **62** | **1** | **0** |
+| # | Disposition | What it means | Technique | prior | en_test | es | fr | Total |
+|---|---|---|---|---:|---:|---:|---:|---:|
+| | **Rows collected** | | | **426,291** | **78,591** | **76,631** | **21,752** | **603,265** |
+| 1 | Duplicate search result | Same post returned by more than one search | ID match | 62,032 | 0 | 0 | 969 | 63,001 |
+| 2 | Outside date window | Posted outside the stream's dates | Metadata rule | 0 | 15,386 | 7,031 | 3,836 | 26,253 |
+| 3 | Quote post | A quote of another post | Metadata rule | 0 | 5,153 | 4,245 | 1,761 | 11,159 |
+| | **Posts in the stream** | | | **364,259** | **58,052** | **65,355** | **15,186** | **502,852** |
+| 4 | No US state | Profile location doesn't resolve to one US state | Word mapping | 273,480 | 44,963 | 64,145 | 15,011 | 397,599 |
+| 5 | Foreign place name | Profile names a place outside the US in the stream's language area | Word list | — | — | 360 | 34 | 394 |
+| | **Placed in a US state** | | | **90,779** | **13,089** | **850** | **141** | **104,859** |
+| 6 | Hub author | Top 1% by volume, not farm or ag | Counting rule | 26,479 | 4,610 | 67 | 0 | 31,156 |
+| 7 | Copypasta repeat | Later copy of a mass-posted text | Text fingerprint | 6,379 | 351 | 19 | 1 | 6,750 |
+| | **Filtered subset** (`use_sentiment`) | | | **57,921** | **8,128** | **764** | **140** | **66,953** |
+| 8 | Not a local observation | Not firsthand or near-firsthand | LLM decision | 56,939 | 7,957 | 762 | 139 | 65,797 |
+| | **Local observations** | | | **982** | **171** | **2** | **1** | **1,156** |
+| 9 | No sick or dead animals | Local, but no illness seen | LLM decision | 632 | 86 | 1 | 1 | 720 |
+| | **Sick or dead animals seen** | | | **350** | **85** | **1** | **0** | **436** |
+| 10 | Retrospective | Event more than ~30 days before the post | LLM decision | 51 | 8 | 0 | — | 59 |
+| 11 | Outside the US | Event is outside the US | LLM decision | 23 | 2 | 0 | — | 25 |
+| 12 | Not HPAI | Tested negative, or another disease | LLM decision | 6 | 0 | 0 | — | 6 |
+| 13 | Secondhand | Relayed from outside the author's state | LLM decision | 48 | 1 | 0 | — | 49 |
+| 14 | Not credible | Joke, sarcasm or conspiracy | LLM decision | 4 | 1 | 0 | — | 5 |
+| | **Event posts** | | | **218** | **73** | **1** | **0** | **292** |
+| 15 | Same state-week | Same state and week as an earlier sighting | Counting rule | 38 | 11 | 0 | — | 49 |
+| | **Sighting** (`use_sightings`) | | | **180** | **62** | **1** | **0** | **243** |
 
 In total: **243 sightings from 603,265 rows collected**, about 1 in 2,500.
 

@@ -1,4 +1,5 @@
-"""Rebuild a frozen modeling table: `model_county_day` (baseline) or `model_county_day_gdelt`.
+"""Rebuild a frozen modeling table: `model_county_day` (baseline), `model_county_day_gdelt`,
+`model_county_day_35` or `model_state_week`.
 
 `model_county_day` is a physical snapshot, not a matview, so that a fitted model can be
 tied to a known vintage (see the header of 012_model_county_day.sql). The flip side is
@@ -13,6 +14,8 @@ Usage (Cloud SQL Auth Proxy on 5433, or a local Postgres):
     uv run python sql/rebuild_model_county_day.py
     uv run python sql/rebuild_model_county_day.py --refresh-upstream
     uv run python sql/rebuild_model_county_day.py --variant gdelt
+    uv run python sql/rebuild_model_county_day.py --variant rf35
+    uv run python sql/rebuild_model_county_day.py --variant state_week
 
 --refresh-upstream refreshes the three upstream matviews first, in the only order that
 does not carry stale lags forward. It rebuilds the BASELINE only; the gdelt variant
@@ -20,6 +23,9 @@ reads model_county_day as-is, so rebuild the baseline first when it is stale.
 
 --variant gdelt refreshes feature_gdelt_county_day (014), then builds
 model_county_day_gdelt from sql/builds/model_county_day_gdelt.sql.
+
+--variant rf35 and --variant state_week read model_county_day and feature_county_day as
+they stand, so rebuild the baseline first when it is stale.
 """
 
 from __future__ import annotations
@@ -35,6 +41,8 @@ SQL_DIR = pathlib.Path(__file__).parent
 VARIANTS = {
     "baseline": ("model_county_day", SQL_DIR / "012_model_county_day.sql"),
     "gdelt": ("model_county_day_gdelt", SQL_DIR / "builds" / "model_county_day_gdelt.sql"),
+    "rf35": ("model_county_day_35", SQL_DIR / "builds" / "model_county_day_35.sql"),
+    "state_week": ("model_state_week", SQL_DIR / "builds" / "model_state_week.sql"),
 }
 
 # Order matters: feature_county_day reads the other two. Refreshing it alone silently
