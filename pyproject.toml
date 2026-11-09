@@ -35,6 +35,7 @@ modeling = [
     "scikit-learn>=1.5",
     "statsmodels>=0.14",
     "matplotlib>=3.9",
+    "seaborn>=0.13.2",
 ]
 dev = [
     "ruff>=0.6",
