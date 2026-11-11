@@ -44,6 +44,7 @@ from h5n1.models.x_lift import RF_PARAMS, SEEDS, paired_boot
 SPEC = ROOT / "docs" / "x_utility_spec.md"
 N_BOOT_EXPLORE, N_BOOT_FINAL, N_PERM = 500, 2000, 300
 SEED = 20260728
+FROZEN_M = 10.58  # pseudocount estimated through 2024, frozen in the spec
 TEST_FIRST = pd.Timestamp("2025-01-05")  # first Sunday of the test
 ARMS = {"S0": S0, "S1": X_FEATURES, "S2": S0 + X_FEATURES, "S3": S3, "S4": S3 + X_FEATURES,
         "S4v": S3 + VOLUME, "S4s": S3 + SENTIMENT}
@@ -341,7 +342,7 @@ def final(test_start: pd.Timestamp, end: pd.Timestamp, tag: str, commit: str, n_
     posts = load_posts()
     posts = posts[posts.ts.dt.tz_convert(None) <= end + pd.Timedelta(days=1)]
     m = estimate_pseudocount(posts)
-    assert abs(m - 10.58) < 0.01, m  # frozen: estimated through 2024
+    assert abs(m - FROZEN_M) < 0.01, m  # frozen: estimated through 2024
     sw = load_state_week(end)
     base = panel(posts, sw, m)
     variants = {"primary": covered(base), "min5": covered(base, 5)}
