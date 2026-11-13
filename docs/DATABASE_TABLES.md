@@ -48,6 +48,8 @@ tables the models read. The X (Twitter) tables sit outside that grain, one row p
 | **Modeling tables** | | | | | |
 | `model_county_day` | table | 7,524,342 | 2.1 GB | 2020-01-01..2026-07-21 | Frozen snapshot: Waree's 23 RF predictors + target |
 | `model_county_day_gdelt` | table | 7,524,342 | 2.5 GB | 2020-01-01..2026-07-21 | Same snapshot + 12 GDELT columns (35 predictors) |
+| `model_county_day_35` | table | 7,524,342 | 2.5 GB | 2020-01-01..2026-07-21 | Same snapshot + the 12 predictors below the RF cut (35 predictors, no news or X) |
+| `model_state_week` | table | 11,662 | 4.5 MB | 2022-01-02..2026-07-19 | State baseline surface: one row per CONUS state or DC and week ending Sunday, no X |
 | **Bookkeeping** | | | | | |
 | `model_build_log` | table | 5 | — | — | One row per build of a `model_*` table |
 | `schema_migrations` | table | 15 | — | — | Which `sql/0xx_*.sql` migrations have been applied |
@@ -298,6 +300,19 @@ version is `model_build_log` build 2 (2026-09-09).
 **`model_county_day_gdelt`** — `model_county_day` build 2 plus 12 log-transformed GDELT columns
 (35 predictors), for the GDELT lift test. Rebuild with
 `sql/rebuild_model_county_day.py --variant gdelt`; current version is build 5 (2026-09-24).
+
+**`model_county_day_35`** — `model_county_day` build 2 plus the 12 predictors the importance cut
+dropped, giving the full 35-feature set of `regression_baseline.ipynb`. It is the county baseline
+reported on its own in the X utility analysis; it holds no news or X data. Rebuild with
+`sql/rebuild_model_county_day.py --variant rf35`; current version is build 7 (2026-10-31).
+
+**`model_state_week`** — the state baseline for the X utility analysis (`docs/x_utility_spec.md`).
+One row per CONUS state or DC and week ending Sunday (`day`), with 7, 14 and 30-day targets and their
+completeness flags, `state_new_onset`, and 37 predictors in total including the fill-related flags.
+Predictor windows include `day`, unlike the county tables, and targets start at `day + 1`. Summed
+layer inventory is a lower bound wherever NASS withheld values, so `layer_withheld_share` must travel
+with it. Rebuild with `sql/rebuild_model_county_day.py --variant state_week`; current version is
+build 6 (2026-10-31).
 
 ### Bookkeeping
 

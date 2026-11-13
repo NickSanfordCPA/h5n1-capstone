@@ -83,10 +83,12 @@ def sightings(streams: list[str]) -> pd.DataFrame:
 
 
 def sentiment_posts(streams: list[str]) -> pd.DataFrame:
-    """(_id, state, ts, account_type, sentiment) for the filtered subset of the given streams.
-    Unscored posts are left out, never counted as 0 (every subset post is scored as of 2026-10-19)."""
+    """(_id, state, ts, account_type, sentiment, is_negative) for the filtered subset of the given
+    streams. is_negative = negative is the top class. Unscored posts are left out, never counted as
+    0 (every subset post is scored as of 2026-10-19)."""
     return _read("use_sentiment AND sentiment IS NOT NULL",
-                 "post_id AS _id, state, created_at AS ts, account_type, sentiment", streams)
+                 "post_id AS _id, state, created_at AS ts, account_type, sentiment, "
+                 "negative_score >= GREATEST(neutral_score, positive_score) AS is_negative", streams)
 
 
 def copypasta_key(text: pd.Series) -> pd.Series:
