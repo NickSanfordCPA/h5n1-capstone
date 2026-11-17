@@ -146,7 +146,17 @@ Not in the protocol, because they are plumbing:
 
 ## Departures from the protocol
 
-*(None. The protocol is not yet committed.)*
+The protocol was committed as `ef852d2` (gate 1, 2026-11-17).
+
+1. **Labelling scope (2026-11-17, Nick's instruction).** The protocol's option A is two reads of
+   all 66,590 reader-set posts. After wave 1 batches 0-94 had been read, Nick reported that Max
+   is re-pulling the X data with his own method, covering the prior-cohort period and the dates
+   after his last pull. The unread prior-cohort X posts (`collector = prev_cohort_en`, 18,408
+   posts) are therefore **not read for now**; the unread Meta posts and Max's `twitterapi_*` X
+   posts were re-cut into `wave1f` and read twice. Reason: reading posts that the re-pull may
+   replace would spend reader budget for nothing. Consequence to settle before any analysis:
+   prior-cohort X is only partly labelled (the share that fell in wave 1 batches 0-94), so the
+   X arm cannot be run on the protocol's reader set until the re-pull is in and labelled.
 
 ## Next step
 
@@ -175,3 +185,73 @@ Code still to change to match (after the commit): `sql/builds/model_state_week.s
 28-day onset flag and a 28-day target; the model code needs the search and five seeds.
 
 **Gate 1 passed 2026-11-17.** Next: fix batches, first 20 reader runs after the usage window resets.
+
+## Update, end of 2026-11-17 (after gate 1)
+
+*This section is current. "Status at a glance" and "Next step" above were written before gate 1
+and are superseded by it.*
+
+**Gate 1.** `PROTOCOL.md` committed as `ef852d252226fd905b1a40a798dc6cc40956cca1`. Post-gate code
+committed as `f1a4077` (`models.py`, `baseline.py`, `build_state_week.py`, `authors.py`, the
+28-day columns in `sql/builds/model_state_week.sql`).
+
+**State-week tables.** `model_state_week` and `model_state_week_coll` rebuilt: 11,662 rows by 49
+columns, differing in the six wild-bird columns only. New-onset share 0.7531 at 28 days.
+
+**Baseline search** (2022-2024 folds only, S3, k = 14, new onset): chosen setting 500 trees,
+depth 12, min leaf 50, features one third; mean new-onset PR-AUC 0.2181 against 0.1933 for
+Waree's fixed setting. Depth 12 is the edge of the grid; the grid was not extended.
+
+**State baseline, test period 2025+** (PR-AUC, mean of five seeds; detected minus collection
+with its 95% interval). Files in `data\journal\models\`: `baseline_state.csv`,
+`baseline_state_redating.csv`, `baseline_state_reliability.csv`.
+
+| Setting | k | Slice | Detected | Collection | Difference |
+|---|---|---|---:|---:|---|
+| searched | 7 | new onset | 0.159 | 0.170 | -0.011 (-0.031, +0.007) |
+| searched | 14 | all | 0.547 | 0.556 | -0.008 (-0.016, -0.000) |
+| searched | 14 | new onset | 0.254 | 0.276 | -0.022 (-0.039, -0.007) |
+| searched | 28 | new onset | 0.406 | 0.434 | -0.028 (-0.045, -0.009) |
+| Waree | 14 | new onset | 0.266 | 0.287 | -0.021 (-0.038, -0.004) |
+| Waree | 28 | new onset | 0.425 | 0.444 | -0.020 (-0.039, +0.002) |
+
+Removing the wild-bird look-ahead lowers the baseline at every horizon. The searched forest does
+not beat Waree's settings on the test period at k = 14 new onset (0.254 against 0.266) although
+the development folds preferred it; both are reported and the primary setting is not switched.
+These numbers have not been recomputed independently.
+
+**Labelling.** One fresh Sonnet reader per read per batch of 300, one-line prompt pointing at
+`READER_INSTRUCTIONS.md`; a read counts only if its CSV passes `labels check`.
+
+| Set | Batches | Posts | Reads valid | Posts differing on an analysis field |
+|---|---|---:|---|---:|
+| wave 1, batches 0-94 (all sources, random order) | 95 | 28,500 | A 95, B 95 | 7.7% (on 27,900, before the B 84 and B 86 reads were counted) |
+| `wave1f` (unread Meta, then twitterapi X) | 66 | 19,682 | A 66, B 66 | 6.5% (1,276 posts) |
+| not read: prior-cohort X in wave 1 batches 95-221 | - | 18,408 | - | - |
+
+`wave1f` holds 14,821 Meta posts (batches 0-49) and 4,861 twitterapi X posts (batches 49-65:
+3,814 en, 1,044 es, 3 fr). It was cut by `labels.py focus`, which keeps the wave 1 random order
+within each group and refuses to rebuild. Wave 1 batches 95-221 are superseded.
+
+Agreement between reads on `wave1f` (19,682 posts; `labels agree wave1f`, disagreements in
+`data\journal\labels\wave1f\disagreements.csv`): kappa relevant 0.941, topic 0.877, content
+class 0.947, local place 0.946, illness 0.922, exclude 0.917, place kind 0.923, place state
+0.967, sighting candidate 0.947. Sighting candidates: A 1,546, B 1,552, both 1,474. The largest
+content-class confusion is domestic detection against other (206 and 131).
+
+Agreement on wave 1 (as reported by Nick from a run between sessions, on 27,900 posts): kappa
+0.85-0.96 on every field, content class 0.94, sighting candidate 0.95. It should be rerun now
+that batches 84 and 86 have both reads.
+
+**Cost and limits measured.** A reader run uses 125k-165k Sonnet tokens and 3-4 minutes, about
+0.5% of a 5-hour usage window. The harness refuses more than 64 concurrent subagents.
+
+**Not started.** X author typing (23 batches, guide `GUIDE_author.md`, unpiloted), Opus
+adjudication, the merged label table, funnel steps 9-16 and `funnel.md`, the county baseline,
+Tracks A and B, sensitivity and mechanism checks, WHISPers and GDELT state-week features, the
+kappa packets (gate 2), the paper.
+
+**Next step.** Rerun `labels agree wave1`; then Opus adjudication of the analysis-relevant
+disagreements in wave 1 batches 0-94 and `wave1f`; in parallel the work that needs no readers
+(county baseline, WHISPers and GDELT features). Labelling of Max's re-pulled X waits for the
+data.

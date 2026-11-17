@@ -2,6 +2,7 @@
 
     uv run python -m h5n1.journal.labels pilot              # pilot batches, 2022-2024 posts only
     uv run python -m h5n1.journal.labels batches            # fix the full batches (once)
+    uv run python -m h5n1.journal.labels focus              # unread Meta, then twitterapi X (once)
     uv run python -m h5n1.journal.labels status             # which reads are done
     uv run python -m h5n1.journal.labels check <labels.csv> <batch.jsonl>   # validate one CSV
     uv run python -m h5n1.journal.labels agree <dir>        # agreement between the two reads
@@ -94,6 +95,42 @@ def batches(seed: int = 20261117) -> None:
         write_batch(g, d / f"batch_{n}.jsonl")
     p[["batch", "platform", "post_id"]].to_csv(d / "manifest.csv", index=False)
     print(f"{len(p):,} posts in {p['batch'].nunique()} batches of {BATCH} under {d}")
+
+
+FOCUS = "wave1f"
+
+
+def focus(first_unread: int = 95) -> None:
+    """Re-cut the unread wave1 posts (batches >= first_unread) into wave1f, Meta first and then
+    the twitterapi X pulls; prior-cohort X (prev_cohort_en) is left out because Max is re-pulling
+    that period. Within each group the wave1 random order is kept. Wave1 batches >= first_unread
+    are then superseded and must not be read. Refuses to overwrite."""
+    d = LAB / FOCUS
+    if (d / "manifest.csv").exists():
+        raise SystemExit(f"{d} already has a manifest; batches are fixed and are not rebuilt")
+    m = pd.read_csv(LAB / WAVE / "manifest.csv", dtype={"post_id": str})
+    m["order"] = range(len(m))
+    m = m[m["batch"] >= first_unread].rename(columns={"batch": "wave1_batch"})
+    p = pd.read_parquet(OUT / "funnel.parquet")
+    p = p[p["reader_set"]].assign(post_id=lambda x: x["post_id"].astype(str))
+    p = m.merge(p, on=["platform", "post_id"], how="left", validate="1:1")
+    if p["collector"].isna().any():
+        raise SystemExit("manifest posts missing from the funnel")
+    p = p[p["collector"] != "prev_cohort_en"]
+    p["group"] = (p["platform"] == "x").astype(int)
+    p = p.sort_values(["group", "order"]).reset_index(drop=True)
+    p["batch"] = p.index // BATCH
+    for sub_ in ("A", "B"):
+        (d / sub_).mkdir(parents=True, exist_ok=True)
+    for n, g in p.groupby("batch"):
+        write_batch(g, d / f"batch_{n}.jsonl")
+    p[["batch", "wave1_batch", "platform", "collector", "post_id"]].to_csv(
+        d / "manifest.csv", index=False)
+    ins = (LAB / WAVE / "READER_INSTRUCTIONS.md").read_text(encoding="utf-8")
+    (d / "READER_INSTRUCTIONS.md").write_text(ins.replace(WAVE, FOCUS), encoding="utf-8")
+    print(p.groupby(["platform", "collector"]).size().to_string())
+    print(f"{len(p):,} posts in {p['batch'].nunique()} batches under {d}")
+    print(p.groupby("batch")["platform"].agg(lambda s: "+".join(sorted(set(s)))).value_counts())
 
 
 def status(wave: str = WAVE) -> None:
@@ -197,13 +234,15 @@ def agree(wave: str) -> None:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("step", choices=["pilot", "batches", "status", "check", "agree"])
+    ap.add_argument("step", choices=["pilot", "batches", "focus", "status", "check", "agree"])
     ap.add_argument("args", nargs="*")
     a = ap.parse_args()
     if a.step == "pilot":
         pilot()
     elif a.step == "batches":
         batches()
+    elif a.step == "focus":
+        focus()
     elif a.step == "status":
         status(*a.args)
     elif a.step == "check":
