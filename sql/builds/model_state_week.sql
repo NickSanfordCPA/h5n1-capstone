@@ -11,9 +11,16 @@
 -- windows end at day, so stopping the baseline a day earlier would let a post get credit
 -- for an outbreak confirmed that same day. Nothing leaks: targets start at day+1.
 --
--- KNOWN BIAS, in the baseline's favour. Wild-bird `day` is a collection date, published
--- later than it is dated, so recent wild detections were not all knowable at `day`. This
--- is inherited from the county surface and works against X, so it is left as it is.
+-- WILD-BIRD DATING. This file reads fact_wild_bird_detection as it stands. In the shared
+-- database that table is dated by Collection Date, which is published later than it is dated,
+-- so recent wild detections were not all knowable at `day`: a look-ahead in the baseline's
+-- favour. In the journal rebuild (local database, h5n1/journal/wild_birds.py) the table is
+-- dated by Date Detected, which removes that look-ahead, and the collection-dated version is
+-- built only as a sensitivity table (model_state_week_coll, h5n1/journal/build_state_week.py).
+--
+-- WEEK ALIGNMENT (journal rebuild, protocol section 3). New onset and the longest horizon are
+-- 28 days = four weeks. The 30-day versions are kept beside them for the sensitivity check
+-- and for the earlier X/Meta code: state_new_onset_30d, target_outbreak_next_30d.
 --
 -- NEIGHBORS. Two states are neighbors if any of their counties touch. Neighbor counts are
 -- summed from STATE totals. Summing the county nbr_* columns instead would count a county
@@ -66,6 +73,7 @@ own AS (
     SELECT g.state, g.day,
            COUNT(o.day) FILTER (WHERE o.day > g.day - 7)                 AS outbreaks_7d,
            COUNT(o.day) FILTER (WHERE o.day > g.day - 21)                AS outbreaks_21d,
+           COUNT(o.day) FILTER (WHERE o.day > g.day - 28)                AS outbreaks_28d,
            COUNT(o.day) FILTER (WHERE o.day > g.day - 30)                AS outbreaks_30d,
            COUNT(o.day) FILTER (WHERE o.day > g.day - 60)                AS outbreaks_60d,
            COUNT(DISTINCT o.fips) FILTER (WHERE o.day > g.day - 7)       AS infected_counties_7d,
@@ -142,6 +150,7 @@ future AS (
     SELECT g.state, g.day,
            COALESCE(BOOL_OR(o.day <= g.day + 7),  FALSE) AS target_outbreak_next_7d,
            COALESCE(BOOL_OR(o.day <= g.day + 14), FALSE) AS target_outbreak_next_14d,
+           COALESCE(BOOL_OR(o.day <= g.day + 28), FALSE) AS target_outbreak_next_28d,
            COALESCE(BOOL_OR(o.day <= g.day + 30), FALSE) AS target_outbreak_next_30d
     FROM grid g
     LEFT JOIN outbreak o
@@ -157,11 +166,14 @@ SELECT
     -- targets, and whether each forward window is fully inside the loaded data
     t.target_outbreak_next_7d,
     t.target_outbreak_next_14d,
+    t.target_outbreak_next_28d,
     t.target_outbreak_next_30d,
     (g.day + 7  <= l.day) AS target_complete_7d,
     (g.day + 14 <= l.day) AS target_complete_14d,
+    (g.day + 28 <= l.day) AS target_complete_28d,
     (g.day + 30 <= l.day) AS target_complete_30d,
-    (o.outbreaks_30d = 0) AS state_new_onset,
+    (o.outbreaks_28d = 0) AS state_new_onset,
+    (o.outbreaks_30d = 0) AS state_new_onset_30d,
 
     -- S0: place, season, fixed exposure
     c.doy_sin,
@@ -230,7 +242,7 @@ SELECT 'model_state_week',
        COUNT(*),
        (SELECT COUNT(*) FROM information_schema.columns
          WHERE table_name = 'model_state_week'
-           AND column_name NOT IN ('state', 'day', 'state_new_onset')
+           AND column_name NOT IN ('state', 'day', 'state_new_onset', 'state_new_onset_30d')
            AND LEFT(column_name, 7) <> 'target_'),
        MAX(day),
        'Week ending Sunday; trailing windows include day; built from fact_h5n1_outbreak, '

@@ -1,6 +1,8 @@
 """Reader batches and label handling for the unified guide (docs/journal_rebuild/GUIDE_reader.md).
 
     uv run python -m h5n1.journal.labels pilot              # pilot batches, 2022-2024 posts only
+    uv run python -m h5n1.journal.labels batches            # fix the full batches (once)
+    uv run python -m h5n1.journal.labels status             # which reads are done
     uv run python -m h5n1.journal.labels check <labels.csv> <batch.jsonl>   # validate one CSV
     uv run python -m h5n1.journal.labels agree <dir>        # agreement between the two reads
 
@@ -70,6 +72,38 @@ def pilot(n_per_cell: int = 75, seed: int = 20261117) -> None:
         d / "sample.csv", index=False)
     print(f"pilot: {len(s)} posts in {k} batches under {d}")
     print(s.groupby(["platform", "lang_detected", "local_tier"]).size().to_string())
+
+
+BATCH = 300
+WAVE = "wave1"
+
+
+def batches(seed: int = 20261117) -> None:
+    """Fix the full labelling batches: every reader-set post, in one random order, BATCH posts
+    each. The order is random so that a pause never leaves a platform or a period unread.
+    Refuses to overwrite: the batches are fixed once, before any post is read."""
+    d = LAB / WAVE
+    if (d / "manifest.csv").exists():
+        raise SystemExit(f"{d} already has a manifest; batches are fixed and are not rebuilt")
+    p = pd.read_parquet(OUT / "funnel.parquet")
+    p = p[p["reader_set"]].sample(frac=1, random_state=seed).reset_index(drop=True)
+    p["batch"] = p.index // BATCH
+    for sub_ in ("A", "B"):
+        (d / sub_).mkdir(parents=True, exist_ok=True)
+    for n, g in p.groupby("batch"):
+        write_batch(g, d / f"batch_{n}.jsonl")
+    p[["batch", "platform", "post_id"]].to_csv(d / "manifest.csv", index=False)
+    print(f"{len(p):,} posts in {p['batch'].nunique()} batches of {BATCH} under {d}")
+
+
+def status(wave: str = WAVE) -> None:
+    """Which reads are done: a read counts only if its CSV exists and passes the checker."""
+    d = LAB / wave
+    n = len(list(d.glob("batch_*.jsonl")))
+    for sub_ in ("A", "B"):
+        done = sorted(int(f.stem.split("_")[1]) for f in (d / sub_).glob("labels_*.csv"))
+        todo = [i for i in range(n) if i not in set(done)]
+        print(f"read {sub_}: {len(done)} of {n} done; next to do: {todo[:12]}")
 
 
 def check(labels_csv: str, batch_jsonl: str) -> int:
@@ -163,11 +197,15 @@ def agree(wave: str) -> None:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("step", choices=["pilot", "check", "agree"])
+    ap.add_argument("step", choices=["pilot", "batches", "status", "check", "agree"])
     ap.add_argument("args", nargs="*")
     a = ap.parse_args()
     if a.step == "pilot":
         pilot()
+    elif a.step == "batches":
+        batches()
+    elif a.step == "status":
+        status(*a.args)
     elif a.step == "check":
         sys.exit(check(*a.args))
     else:
