@@ -11,10 +11,10 @@ Brief: `docs/journal_rebuild/FABLE_INSTRUCTIONS.md`. Updated after every complet
 | 6.3 WHISPers | **Loaded.** No public record-created date; lower-bound date built. Features wait for gate 1 |
 | 6.4 Post pipeline | Steps 1–8 **done** for both platforms (`journal.post`). Guide J1 piloted. Full labelling waits for gate 1 |
 | 6.5 Sentiment | **Done.** All 66,590 reader-set posts scored and loaded |
-| **Gate 1: `PROTOCOL.md`** | **Written. Waiting for Nick to approve and commit.** |
-| 6.6–6.10, paper | Blocked by gate 1 |
+| **Gate 1: `PROTOCOL.md`** | **Committed.** |
+| 6.6–6.10, paper | Open. Labelling first |
 
-Protocol commit hash: *(none yet; Nick commits it)*
+Protocol commit hash: `ef852d252226fd905b1a40a798dc6cc40956cca1` (committed 2026-11-17 at Nick's instruction; guide J1 frozen at `a03dcaf`)
 
 ## Environment facts (verified 2026-11-17)
 
@@ -174,4 +174,4 @@ Applied to `PROTOCOL.md` (section 14 lists who decided what):
 Code still to change to match (after the commit): `sql/builds/model_state_week.sql` needs a
 28-day onset flag and a 28-day target; the model code needs the search and five seeds.
 
-**Still waiting for Nick to commit `PROTOCOL.md`.**
+**Gate 1 passed 2026-11-17.** Next: fix batches, first 20 reader runs after the usage window resets.
