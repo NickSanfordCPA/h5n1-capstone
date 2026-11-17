@@ -155,3 +155,23 @@ Not in the protocol, because they are plumbing:
 2. Full labelling (option A or B from protocol 6.6), X author typing, adjudication.
 3. `funnel.md`, then Tracks A and B, the baseline re-dating numbers, sensitivity and mechanism
    checks, the κ packets (gate 2), and the paper.
+
+## Nick's review of the protocol draft (2026-11-17)
+
+Applied to `PROTOCOL.md` (section 14 lists who decided what):
+- New onset 28 days; longest horizon 28 days (30-day versions kept as a sensitivity check).
+- Small hyperparameter search on the baseline only, inside 2022–2024, same setting for every arm;
+  Waree's fixed settings as a sensitivity check.
+- Steps 4 and 8 kept, each on its own merits (treat this as a new analysis).
+- Hub authors not removed; NFKC normalisation approved.
+- Track B: one sighting per state-week stays primary; dose-response added as secondary.
+- Labelling option A (two reads of all 66,590), paced inside Nick's 5-hour usage limit: first
+  group of 20 runs, then Nick reports his meter and the group size is set to at most 60% of a
+  window.
+- GPU work: cuda1L and cuda2L first; cuda2R only after testing. The sentiment scoring was already
+  done on cuda2R before this rule and is verified against a CPU rescore, so it was not redone.
+
+Code still to change to match (after the commit): `sql/builds/model_state_week.sql` needs a
+28-day onset flag and a 28-day target; the model code needs the search and five seeds.
+
+**Still waiting for Nick to commit `PROTOCOL.md`.**
