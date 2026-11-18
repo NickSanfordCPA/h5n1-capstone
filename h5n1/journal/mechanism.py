@@ -393,7 +393,52 @@ def run(smoke: bool) -> None:
           .round(3).to_string(index=False))
 
 
+# ---------------------------------------------------------------- risk-level check
+
+def risk_check() -> None:
+    """Post hoc (added in the self-review of the first draft, after the results were seen).
+    Sighted state-weeks have about twice the expected risk of the others, so a baseline that
+    under-predicts at high risk would give an O/E ratio above 1 with no information in the
+    posts. Two adjustments, from the saved panel: (1) the sighted O/E against the non-sighted
+    O/E of the same expected-risk quintile; (2) an offset logistic model of the outcome on the
+    sighting indicator that also recalibrates on logit risk and its square, standard errors
+    clustered on week. Output: mechanism_risk_adjusted.csv."""
+    import statsmodels.api as sm
+
+    panel = pd.read_parquet(M.OUT / "mechanism_panel.parquet")
+    rows = []
+    for gap in GAPS:
+        t = panel[(panel.gap == gap) & panel.e_test.notna()].copy()
+        t["bin"] = pd.qcut(t.e_test, 5, labels=False, duplicates="drop")
+        top = t[t.bin == t.bin.max()]
+        for plat in T.PLATFORMS:
+            s = t[f"s_all_{plat}"].to_numpy(bool)
+            non = t[~s].groupby("bin").apply(lambda g: g.y.sum() / g.e_test.sum(), include_groups=False).rename("oe_n")
+            m = t[s].merge(non, left_on="bin", right_index=True)
+            crude = (t[s].y.sum() / t[s].e_test.sum()) / (t[~s].y.sum() / t[~s].e_test.sum())
+            lo_ = T.logit(t.e_test.to_numpy())
+            X = pd.DataFrame({"const": 1.0, "sighted": s.astype(float), "lo": lo_, "lo2": lo_ ** 2}, index=t.index)
+            rec = {"gap_days": gap, "platform": plat, "sighted": int(s.sum()),
+                   "mean_risk_sighted": float(t[s].e_test.mean()), "mean_risk_other": float(t[~s].e_test.mean()),
+                   "top_quintile_oe_all_rows": float(top.y.sum() / top.e_test.sum()),
+                   "oe_ratio_crude": float(crude),
+                   "oe_ratio_risk_standardised": float(t[s].y.sum() / (m.e_test * m.oe_n).sum())}
+            for name, cols in (("offset_only", ["const", "sighted"]), ("recalibrated", ["const", "sighted", "lo", "lo2"])):
+                f = sm.GLM(t.y, X[cols], family=sm.families.Binomial(), offset=lo_).fit(
+                    cov_type="cluster", cov_kwds={"groups": pd.factorize(t.day)[0]})
+                b, se = f.params["sighted"], f.bse["sighted"]
+                rec.update({f"or_{name}": float(np.exp(b)), f"or_{name}_lo": float(np.exp(b - 1.96 * se)),
+                            f"or_{name}_hi": float(np.exp(b + 1.96 * se))})
+            rows.append(rec)
+    res = pd.DataFrame(rows)
+    res.to_csv(M.OUT / "mechanism_risk_adjusted.csv", index=False)
+    pd.set_option("display.width", 250, "display.max_columns", 40)
+    print(res.round(3).to_string(index=False))
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--smoke", action="store_true")
-    run(ap.parse_args().smoke)
+    ap.add_argument("--risk-check", action="store_true", help="post hoc risk-level adjustment from the saved panel")
+    a = ap.parse_args()
+    risk_check() if a.risk_check else run(a.smoke)

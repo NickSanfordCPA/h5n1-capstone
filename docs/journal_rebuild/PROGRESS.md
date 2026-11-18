@@ -12,7 +12,8 @@ Brief: `docs/journal_rebuild/FABLE_INSTRUCTIONS.md`. Updated after every complet
 | 6.4 Post pipeline | Steps 1–8 **done** for both platforms (`journal.post`). Guide J1 piloted. Full labelling waits for gate 1 |
 | 6.5 Sentiment | **Done.** All 66,590 reader-set posts scored and loaded |
 | **Gate 1: `PROTOCOL.md`** | **Committed.** |
-| 6.6–6.10, paper | Open. Labelling first |
+| 6.6–6.10 | **Done** (2026-11-18). Human validation: packets out, agreement pending the coded files |
+| Paper | **Draft 1 written**, self-reviewed; open items at the top of `paper/manuscript.md` and in `paper/self_review.md`. All X numbers provisional until Max's re-pull |
 
 Protocol commit hash: `ef852d252226fd905b1a40a798dc6cc40956cca1` (committed 2026-11-17 at Nick's instruction; guide J1 frozen at `a03dcaf`)
 
@@ -61,6 +62,9 @@ Protocol commit hash: `ef852d252226fd905b1a40a798dc6cc40956cca1` (committed 2026
 | `sensitivity.py` | Sensitivity checks on both primaries (protocol 8.6); resumable per check |
 | `county.py` | County baseline C3: cached modelling rows, search, test scores, roll-up to state-weeks (protocol 8.4) |
 | `kappa.py` | Human validation: sample draw, coder workbooks, agreement analysis (protocol 11) |
+| `crosscheck.py` | Read-only comparison with Max's `meta_post_analysis` / `meta_post_funnel` (brief 6.10) |
+| `supplement.py` | Capstone supplement: language split of both primaries; emoji-removed rescoring inputs and comparison (brief 6.9) |
+| `figures.py` | The four manuscript figures (`paper/figures/`) |
 
 Documents: `GUIDE_reader.md` (version J1), `PROTOCOL.md` (gate 1 draft).
 
@@ -176,6 +180,17 @@ The protocol was committed as `ef852d2` (gate 1, 2026-11-17).
    re-pull does not return leaves its label unused. The 18,408 posts were cut into `wave1x`
    (62 batches, `labels.py focusx`, which checks that `wave1x` and `wave1f` partition the
    unread wave 1 posts). This returns the labelling to the protocol's option A.
+
+2. **Exclusion days counted from the forecast Sunday (2026-11-18).** The protocol says "after
+   the post". The Sunday is on or after the post, so this is at least as strict.
+
+3. **Post hoc risk-level check (2026-11-18).** Not in the protocol; added after the Track B
+   results were seen, because the self-review raised that sighted state-weeks sit at more
+   than twice the expected risk. Details under "Update, 2026-11-18, third session, second
+   part". Labelled post hoc in the manuscript.
+
+4. **Supplement design (2026-11-18).** The protocol names a language and emoji comparison
+   without specifying it. What was run is described in `supplement.md`.
 
 ## Next step
 
@@ -662,3 +677,123 @@ no Spanish first-hand Meta post outside the earlier strata, and one on X). 345 d
 - `kappa.py analyse` was tested on simulated coder files (reader labels with 10% noise): it
   runs end to end, and the test caught a row-alignment error in the derived sighting field,
   now fixed. Real agreement is pending the three coded files.
+
+## Update, 2026-11-18, third session, second part
+
+*Everything after the validation packets: the risk-level check, the cross-check, the
+supplement, the figures and the paper package.*
+
+**Post hoc risk-level check (`mechanism.py --risk-check`; file `mechanism_risk_adjusted.csv`).**
+Sighted state-weeks have a mean expected risk of 0.39 against 0.16 for the rest on Meta (0.34
+against 0.16 on X), so a baseline that under-predicts at high risk could give an O/E ratio
+above 1 with no information in the posts. The check compares sighted with unsighted
+state-weeks within fifths of expected risk (a risk-standardised ratio) and fits a logistic
+model of the outcome on the sighting indicator with the baseline logit as a recalibrated
+covariate, standard errors clustered on week.
+
+| Days excluded | Platform | Crude ratio | Risk-standardised | OR, recalibrated (95% CI) | Top-fifth O/E, all rows |
+|---|---|---|---|---|---|
+| 0 | Meta | 1.21 | 1.24 | 1.59 (1.20, 2.11) | 1.01 |
+| 0 | X | 1.13 | 1.14 | 1.32 (0.99, 1.75) | 1.01 |
+| 5 | Meta | 1.19 | 1.21 | 1.34 (0.95, 1.89) | 1.07 |
+| 5 | X | 1.27 | 1.30 | 1.49 (1.12, 1.98) | 1.07 |
+| 10 | Meta | 1.43 | 1.34 | 1.43 (1.03, 1.98) | 1.34 |
+| 10 | X | 1.40 | 1.32 | 1.41 (1.01, 1.99) | 1.34 |
+
+- The excess is not a risk-level artefact at 0 to 7 days: standardising changes nothing.
+- The rise at a 10-day exclusion is partly miscalibration: for that late window the baseline
+  under-predicts in the top fifth of risk (O/E 1.34 over all rows), and the standardised
+  ratios (1.34, 1.32) are close to those at shorter exclusions. The abstract quotes the
+  standardised figures.
+- The standardised ratios have no bootstrap interval yet (self-review M3).
+- Not independently recomputed.
+
+**Cross-check against Max's tables (brief 6.10; `crosscheck.py`, shared database read-only
+through the proxy on 5433, since stopped; files in `data\journal\crosscheck\`).** Max labels a
+week by its Monday and this rebuild by the Sunday that ends it; his weeks were shifted by 6
+days before state-weeks were compared.
+- 301,044 unique Meta posts in both pipelines.
+- Geocoded state: both give one for 22,990 posts and agree on 22,862 (99.4%); 9,151 have a
+  state only here and 7,379 only in Max's.
+- Reader set 25,932 here against 30,369 candidates in his, 22,723 in common. Of the 7,646
+  only in his, 4,943 fall outside this rebuild's window and 1,488 name no state by its rules.
+- Sighting posts 1,670 here, 1,422 in his, 964 in both. On the 17,612 posts judged for
+  sightings in both, κ = 0.79 (357 his only, 119 ours only). The state agrees on 99.5% of
+  posts both call sightings.
+- Sighted state-weeks 505 here, 506 in his, 376 in common. Of this rebuild's sighting posts,
+  212 are by authors he removed as hubs and 375 are not in his funnel.
+- In the paper as Multimedia Appendix 6 (`paper/appendices.md`).
+
+**Supplement (brief 6.9; `supplement.py`; `docs\journal_rebuild\supplement.md`; files in
+`data\journal\supplement\`).** Language: both primaries with English-only and Spanish-only
+posts. Emoji: the 7,386 sentiment-set posts containing an emoji (Meta 3,186; X 4,200) were
+rescored with the emoji removed, on primary's CPU, and Track A rerun with those scores.
+- Track A is null in each language (English-only Meta +0.002 (−0.010, +0.015), X −0.003
+  (−0.011, +0.009); Spanish-only Meta −0.006 (−0.023, +0.011); Spanish-only X has 5 events).
+- Track B: English-only sightings reproduce the pooled result (Meta 1.21 (1.06, 1.38) from
+  282 sighted state-weeks; X identical to pooled, since every sighted X state-week has an
+  English sighting). Spanish-only Meta: 12 followed of 40 where 16.9 were expected, ratio
+  0.69 (0.43, 0.96); 0.79 (0.37, 1.21) with 5 days excluded. Unplanned small cell.
+- Emoji: 14% of sentiment-set posts have one (10% and 11% of English, 47% and 39% of Spanish
+  on Meta and X). Removing them changes the mean score by 0.01 or less in every cell, the
+  label of 4% to 7% of those posts, and Track A not at all (Meta +0.000 (−0.013, +0.011), X
+  −0.002 (−0.010, +0.006)).
+- The `sighting_posts` column in `language_b.csv` and `sensitivity_counts.csv` includes the
+  step-15 posts (outside the contiguous states: 41 Meta, 208 X), which the state-week grid
+  then drops. That is why it sums to 1,711 and 3,232 and not to the funnel's 1,670 and 3,024.
+  `supplement.md` reports the funnel counts.
+- `supplement run` executed once, without a smoke test, and ran clean. Not independently
+  recomputed.
+
+**Figures (`figures.py`; `paper\figures\fig1_funnel.png`, `fig2_track_a.png`,
+`fig3_track_b.png`, `fig4_mechanism.png`).** Static PNG; two hues (Facebook `#2a78d6`, circle;
+X `#eb6834`, square) that passed the dataviz skill's contrast and colour-blind checks;
+dot-and-interval charts with a reference line; the funnel is points on a log axis. Each was
+rendered and inspected. Known flaw: two count labels touch in figure 4B.
+
+**Paper package (`docs\journal_rebuild\paper\`).**
+- `manuscript.md` (source) and `manuscript.docx` (pandoc, rebuilt after the last edit).
+  Abstract 444 words; main text about 6,300 words.
+- `appendices.md`: Multimedia Appendices 5 (calibration table and county baseline), 6
+  (cross-check) and 7 (sensitivity). Appendices 1 to 4 are `checklists.md`, `PROTOCOL.md`
+  with this file's departures, `funnel.md`, and the two guides. Appendices were renumbered
+  in order of first citation.
+- `checklists.md`: EPIFORGE 2020 (19 items, read from the PLoS Medicine article 2026-11-18)
+  and TRIPOD+AI machine-learning topics (**from memory**, flagged in the file).
+- `self_review.md`: `paper-review` skill, self-review mode. Four major comments (the result
+  re-estimates a pattern already seen; no human validation yet; risk-level confounding,
+  partly addressed; X provisional and dependent on three accounts) and eleven minor.
+- Tables 1 to 3 and the dose-response figures were re-checked against the result CSVs on
+  2026-11-18 and agree.
+
+**Changes made to the manuscript after the self-review.** Abstract quotes the
+risk-standardised 10-day ratios; "stronger baseline" and "gain of practical size" reworded;
+a calibration sentence and table; the residual-confounding reading of the missing
+dose-response; one sentence on the cross-check; references corrected and extended.
+
+**JMIR checks (2026-11-18).** Structured abstract (Background, Objective, Methods, Results,
+Conclusions), 450 words maximum: from a web search of JMIR support pages; the abstract
+guideline page itself returned 403. AI use is declared in a submission form and published as
+its own statement, and authors are asked to keep prompts and transcripts and submit them as
+a Multimedia Appendix: from a search summary of the JMIR policy page, not read directly. The
+instructions-for-authors page was fetched. These should be re-read by an author at
+submission.
+
+**Reference check (2026-11-18, Sonnet subagent, web search and fetch).** References 1-4, 8,
+9, 12-14 confirmed; 6 corrected (Movahedi Nia et al, J R Soc Interface 2026, Canadian data)
+and 7 completed (Zou, Carlton, Grover; medRxiv, April 1, 2026); 10 and 11 partly confirmed; 5
+unpublished. Added as references 15 to 17: Pang et al 2025 (Reddit, JMIR), Soltani et al
+2025 (social media and Google Trends, the closest competing claim) and Petie et al 2026
+(wild-bird mortality, Netherlands). **The full texts of 6, 15, 16 and 17 were not read**; the
+sentences describing them rest on search summaries. The subagent's query log was not kept.
+Unresolved leads are in `self_review.md`.
+
+**Still open.**
+- Human validation analysis (`kappa.py analyse`) when the three workbooks return.
+- The X rerun on Max's re-pull: every X number changes; carry-over rules are in the
+  "Departures" section and in the manuscript's comment block.
+- Bootstrap intervals for the risk-standardised ratios; the Platt-calibrated reliability
+  table; compute cost; data-source references; LLM version identifiers; a logged literature
+  search; the 292 and 419 in the timing description above against 290 and 418 elsewhere.
+- Nick's items: IRB determination, Meta publication terms, course AI policy, author order
+  and Muthu's role, deadline, Waree's sign-off on the re-dated baseline.
