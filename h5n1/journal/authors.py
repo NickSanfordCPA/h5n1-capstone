@@ -60,15 +60,133 @@ def batches(seed: int = 20261117) -> None:
           f"{need['batch'].nunique()} batches of {BATCH}")
 
 
+TYPES = {"organisation", "individual"}
+INSTRUCTIONS = """# Author-type reader instructions
+
+You are labelling X accounts as organisation or individual. Do not spawn any subagents. You are
+given READ (A, B or ADJ) and BATCH (a number n).
+
+1. Read the guide in full first:
+   `C:\\Users\\NickS\\Desktop\\Harvard\\Capstone\\docs\\journal_rebuild\\GUIDE_author.md`
+2. Your batch file (one account per line, JSON):
+   READ A or B: `{d}\\batch_<n>.jsonl`
+   READ ADJ:    `{d}\\adj\\batch_<n>.jsonl` (each line also carries `read_1` and `read_2`, two
+   readers' answers in shuffled order; they disagree, so decide yourself from the guide)
+3. Your own scratch folder (create it; use ONLY this folder for scratch files):
+   `{d}\\<READ>\\tmp_<n>`  (for ADJ: `{d}\\adj\\tmp_<n>`)
+4. Write your output CSV, header exactly `id,author_type`, to:
+   `{d}\\<READ>\\labels_<n>.csv`  (for ADJ: `{d}\\adj\\labels_<n>.csv`)
+5. Then run the checker from `C:\\Users\\NickS\\Desktop\\Harvard\\Capstone` and fix anything it
+   reports until it prints OK:
+   `uv run python -m h5n1.journal.authors check <your labels csv> <your batch jsonl>`
+
+Rules: read every account yourself with the Read tool and decide by applying the guide; do not
+classify with a keyword or regex script (a script may only write out answers you decided). Do
+not read any other reader's folder or output.
+
+Final reply, nothing else: the single word `OK` if the checker printed OK, otherwise one line
+saying what failed.
+"""
+
+
+def instructions() -> None:
+    (LAB / "READER_INSTRUCTIONS.md").write_text(INSTRUCTIONS.format(d=str(LAB)), encoding="utf-8")
+    print(LAB / "READER_INSTRUCTIONS.md")
+
+
+def check(labels_csv: str, batch_jsonl: str, quiet: bool = False) -> int:
+    ids = [json.loads(line)["id"] for line in open(batch_jsonl, encoding="utf-8")]
+    x = pd.read_csv(labels_csv, dtype=str, keep_default_na=False)
+    errs = []
+    if list(x.columns) != ["id", "author_type"]:
+        errs.append("header must be exactly id,author_type")
+    elif len(x) != len(ids) or set(x["id"]) != set(ids) or x["id"].duplicated().any():
+        errs.append(f"{len(x)} rows; ids do not match the {len(ids)} in the batch")
+    elif not x["author_type"].isin(TYPES).all():
+        errs.append("author_type must be organisation or individual")
+    if not quiet:
+        print("OK" if not errs else "PROBLEM: " + "; ".join(errs))
+    return 1 if errs else 0
+
+
+def _valid(folder, batch_dir) -> tuple[list[int], list[int]]:
+    have = sorted(int(f.stem.split("_")[1]) for f in folder.glob("labels_*.csv"))
+    bad = [i for i in have if check(str(folder / f"labels_{i}.csv"),
+                                    str(batch_dir / f"batch_{i}.jsonl"), quiet=True)]
+    return [i for i in have if i not in bad], bad
+
+
 def status() -> None:
     n = len(list(LAB.glob("batch_*.jsonl")))
     for sub in ("A", "B"):
-        done = sorted(int(f.stem.split("_")[1]) for f in (LAB / sub).glob("labels_*.csv"))
-        todo = [i for i in range(n) if i not in set(done)]
-        print(f"read {sub}: {len(done)} of {n} done; next to do: {todo[:12]}")
+        ok, bad = _valid(LAB / sub, LAB)
+        todo = [i for i in range(n) if i not in set(ok)]
+        print(f"read {sub}: {len(ok)} of {n} valid; failing the checker: {bad}; next to do: {todo[:12]}")
+    if (LAB / "adj" / "manifest.csv").exists():
+        na = len(list((LAB / "adj").glob("batch_*.jsonl")))
+        ok, bad = _valid(LAB / "adj", LAB / "adj")
+        print(f"adjudication: {len(ok)} of {na} valid; failing: {bad}")
+
+
+def _reads() -> tuple[pd.Series, pd.Series]:
+    rd = lambda sub: pd.concat([pd.read_csv(f, dtype=str, keep_default_na=False)  # noqa: E731
+                                for f in sorted((LAB / sub).glob("labels_*.csv"))]).set_index("id")["author_type"]
+    a, b = rd("A"), rd("B")
+    ids = a.index.intersection(b.index)
+    return a.loc[ids], b.loc[ids]
+
+
+def agree() -> None:
+    from sklearn.metrics import cohen_kappa_score
+
+    a, b = _reads()
+    print(f"{len(a):,} accounts read twice; agreement {(a == b).mean():.3f}, "
+          f"kappa {cohen_kappa_score(a, b):.3f}; differ {int((a != b).sum()):,}")
+    print(pd.crosstab(a.rename("read A"), b.rename("read B")).to_string())
+
+
+def adjbatches(seed: int = 20261118, size: int = 250) -> None:
+    """Fix the adjudication batches: every account the two reads label differently, with both
+    answers in a per-account shuffled order. Refuses to overwrite; run only when both reads
+    are complete."""
+    import numpy as np
+
+    d = LAB / "adj"
+    if (d / "manifest.csv").exists():
+        raise SystemExit(f"{d} already has a manifest; batches are fixed and are not rebuilt")
+    a, b = _reads()
+    need = pd.read_csv(LAB / "manifest.csv", dtype=str)
+    if len(a) != len(need):
+        raise SystemExit(f"only {len(a):,} of {len(need):,} accounts have both reads")
+    acc = {}
+    for f in LAB.glob("batch_*.jsonl"):
+        for line in open(f, encoding="utf-8"):
+            r = json.loads(line)
+            acc[r["id"]] = r
+    ids = sorted(a.index[a != b])
+    rng = np.random.default_rng(seed)
+    order, a_first = rng.permutation(len(ids)), rng.random(len(ids)) < 0.5
+    d.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for k, j in enumerate(order):
+        i = ids[j]
+        r1, r2 = (a[i], b[i]) if a_first[j] else (b[i], a[i])
+        rows.append({"batch": k // size, "id": i, "read_1": "A" if a_first[j] else "B",
+                     "line": json.dumps({**acc[i], "read_1": r1, "read_2": r2}, ensure_ascii=False)})
+    m = pd.DataFrame(rows)
+    for n, g in m.groupby("batch"):
+        (d / f"batch_{n}.jsonl").write_text("\n".join(g["line"]) + "\n", encoding="utf-8")
+    m[["batch", "id"]].to_csv(d / "manifest.csv", index=False)
+    m[["id", "read_1"]].to_csv(LAB / "adj_key.csv", index=False)
+    print(f"{len(m):,} accounts in {m['batch'].nunique()} adjudication batches under {d}")
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("step", choices=["batches", "status"])
-    {"batches": batches, "status": status}[ap.parse_args().step]()
+    ap.add_argument("step", choices=["batches", "instructions", "status", "check", "agree", "adjbatches"])
+    ap.add_argument("args", nargs="*")
+    a = ap.parse_args()
+    if a.step == "check":
+        raise SystemExit(check(*a.args))
+    {"batches": batches, "instructions": instructions, "status": status, "agree": agree,
+     "adjbatches": adjbatches}[a.step]()
