@@ -237,8 +237,9 @@ These numbers have not been recomputed independently.
 |---|---|---:|---|---:|
 | wave 1, batches 0-94 (all sources, random order) | 95 | 28,500 | A 95, B 95 | 7.7% (on 27,900, before the B 84 and B 86 reads were counted) |
 | `wave1f` (unread Meta, then twitterapi X) | 66 | 19,682 | A 66, B 66 | 6.5% (1,276 posts) |
-| `wave1x` (prior-cohort X), batches 0-24 | 25 | 7,500 | A 25, B 25 | 7.1% (535 posts) |
-| `wave1x` batches 25-61, not yet read | 37 | 10,908 | - | - |
+| `wave1x` (prior-cohort X), batches 0-41 | 42 | 12,600 | A 42, B 42 | 7.3% (921 posts) |
+| `wave1x` batch 42 | 1 | 300 | A only | - |
+| `wave1x` batches 43-61, not yet read | 19 | 5,508 | - | - |
 
 `wave1f` holds 14,821 Meta posts (batches 0-49) and 4,861 twitterapi X posts (batches 49-65:
 3,814 en, 1,044 es, 3 fr). It was cut by `labels.py focus`, which keeps the wave 1 random order
@@ -250,10 +251,11 @@ class 0.947, local place 0.946, illness 0.922, exclude 0.917, place kind 0.923, 
 0.967, sighting candidate 0.947. Sighting candidates: A 1,546, B 1,552, both 1,474. The largest
 content-class confusion is domestic detection against other (206 and 131).
 
-Agreement on `wave1x` batches 0-24 (7,500 posts, 2026-11-18; all 50 reads pass the checker):
-kappa relevant 0.905, topic 0.844, content class 0.949, local place 0.974, illness 0.934,
-exclude 0.960, place kind 0.880, place state 0.960, sighting candidate 0.975. Sighting
-candidates: A 552, B 554, both 540. Not yet adjudicated.
+Agreement on `wave1x` batches 0-41 (12,600 posts, 2026-11-18; all 85 reads launched pass the
+checker, none rerun): kappa relevant 0.886, topic 0.843, content class 0.950, local place
+0.975, illness 0.930, exclude 0.958, place kind 0.872, place state 0.958, sighting candidate
+0.972. Sighting candidates: A 921, B 915, both 894. Not yet adjudicated. Remaining: read B of
+batch 42 and both reads of batches 43-61 (39 runs).
 
 Agreement on wave 1, rerun 2026-11-18 on all 28,500 twice-read posts (`labels agree wave1`):
 kappa relevant 0.909, topic 0.847, content class 0.939, local place 0.956, illness 0.919,
