@@ -158,6 +158,16 @@ The protocol was committed as `ef852d2` (gate 1, 2026-11-17).
    prior-cohort X is only partly labelled (the share that fell in wave 1 batches 0-94), so the
    X arm cannot be run on the protocol's reader set until the re-pull is in and labelled.
 
+   **Amended 2026-11-18 (Nick's instruction).** A read-only check of the shared database
+   showed Max had not updated the X data (`x_raw` and `x_csv_raw` identical to the 2026-11-17
+   copy; still no `twitterapi_en` posts dated 2022-06-01 to 2024-12-31). Nick chose to read
+   the prior-cohort X posts now. Labels are keyed by X post id and a reader sees only the id,
+   date, language and text, so a label carries over to the re-pull wherever the same id
+   returns with the same text; a changed text is re-read, a new id is read, and an id the
+   re-pull does not return leaves its label unused. The 18,408 posts were cut into `wave1x`
+   (62 batches, `labels.py focusx`, which checks that `wave1x` and `wave1f` partition the
+   unread wave 1 posts). This returns the labelling to the protocol's option A.
+
 ## Next step
 
 **Gate 1.** Nick reads `PROTOCOL.md`, changes what he wants, and commits it. Then:
@@ -227,7 +237,8 @@ These numbers have not been recomputed independently.
 |---|---|---:|---|---:|
 | wave 1, batches 0-94 (all sources, random order) | 95 | 28,500 | A 95, B 95 | 7.7% (on 27,900, before the B 84 and B 86 reads were counted) |
 | `wave1f` (unread Meta, then twitterapi X) | 66 | 19,682 | A 66, B 66 | 6.5% (1,276 posts) |
-| not read: prior-cohort X in wave 1 batches 95-221 | - | 18,408 | - | - |
+| `wave1x` (prior-cohort X), batches 0-24 | 25 | 7,500 | A 25, B 25 | 7.1% (535 posts) |
+| `wave1x` batches 25-61, not yet read | 37 | 10,908 | - | - |
 
 `wave1f` holds 14,821 Meta posts (batches 0-49) and 4,861 twitterapi X posts (batches 49-65:
 3,814 en, 1,044 es, 3 fr). It was cut by `labels.py focus`, which keeps the wave 1 random order
@@ -238,6 +249,11 @@ Agreement between reads on `wave1f` (19,682 posts; `labels agree wave1f`, disagr
 class 0.947, local place 0.946, illness 0.922, exclude 0.917, place kind 0.923, place state
 0.967, sighting candidate 0.947. Sighting candidates: A 1,546, B 1,552, both 1,474. The largest
 content-class confusion is domestic detection against other (206 and 131).
+
+Agreement on `wave1x` batches 0-24 (7,500 posts, 2026-11-18; all 50 reads pass the checker):
+kappa relevant 0.905, topic 0.844, content class 0.949, local place 0.974, illness 0.934,
+exclude 0.960, place kind 0.880, place state 0.960, sighting candidate 0.975. Sighting
+candidates: A 552, B 554, both 540. Not yet adjudicated.
 
 Agreement on wave 1, rerun 2026-11-18 on all 28,500 twice-read posts (`labels agree wave1`):
 kappa relevant 0.909, topic 0.847, content class 0.939, local place 0.956, illness 0.919,

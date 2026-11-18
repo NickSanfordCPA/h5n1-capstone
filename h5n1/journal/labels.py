@@ -133,6 +133,39 @@ def focus(first_unread: int = 95) -> None:
     print(p.groupby("batch")["platform"].agg(lambda s: "+".join(sorted(set(s)))).value_counts())
 
 
+FOCUS_X = "wave1x"
+
+
+def focusx(first_unread: int = 95) -> None:
+    """Cut the prior-cohort X posts that wave1f left out (wave1 batches >= first_unread,
+    collector prev_cohort_en) into wave1x, in the wave1 random order. Labels are keyed by post
+    id, so they carry over to Max's re-pull wherever the same post returns with the same text.
+    Refuses to overwrite."""
+    d = LAB / FOCUS_X
+    if (d / "manifest.csv").exists():
+        raise SystemExit(f"{d} already has a manifest; batches are fixed and are not rebuilt")
+    m = pd.read_csv(LAB / WAVE / "manifest.csv", dtype={"post_id": str})
+    m["order"] = range(len(m))
+    m = m[m["batch"] >= first_unread].rename(columns={"batch": "wave1_batch"})
+    p = pd.read_parquet(OUT / "funnel.parquet")
+    p = p[p["reader_set"]].assign(post_id=lambda x: x["post_id"].astype(str))
+    p = m.merge(p, on=["platform", "post_id"], how="left", validate="1:1")
+    p = p[p["collector"] == "prev_cohort_en"].sort_values("order").reset_index(drop=True)
+    done = pd.read_csv(LAB / FOCUS / "manifest.csv", dtype={"post_id": str})
+    if len(p) + len(done) != len(m) or set(p["post_id"]) & set(done["post_id"]):
+        raise SystemExit("wave1x and wave1f do not partition the unread wave1 posts")
+    p["batch"] = p.index // BATCH
+    for sub_ in ("A", "B"):
+        (d / sub_).mkdir(parents=True, exist_ok=True)
+    for n, g in p.groupby("batch"):
+        write_batch(g, d / f"batch_{n}.jsonl")
+    p[["batch", "wave1_batch", "platform", "collector", "post_id"]].to_csv(
+        d / "manifest.csv", index=False)
+    ins = (LAB / WAVE / "READER_INSTRUCTIONS.md").read_text(encoding="utf-8")
+    (d / "READER_INSTRUCTIONS.md").write_text(ins.replace(WAVE, FOCUS_X), encoding="utf-8")
+    print(f"{len(p):,} posts in {p['batch'].nunique()} batches under {d}")
+
+
 def status(wave: str = WAVE) -> None:
     """Which reads are done: a read counts only if its CSV exists and passes the checker."""
     d = LAB / wave
@@ -357,7 +390,8 @@ def adjsummary(wave: str) -> None:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("step", choices=["pilot", "batches", "focus", "status", "check", "agree",
+    ap.add_argument("step", choices=["pilot", "batches", "focus", "focusx", "status", "check",
+                                     "agree",
                                      "adjbatches", "adjstatus", "adjsummary"])
     ap.add_argument("args", nargs="*")
     a = ap.parse_args()
@@ -367,6 +401,8 @@ if __name__ == "__main__":
         batches()
     elif a.step == "focus":
         focus()
+    elif a.step == "focusx":
+        focusx()
     elif a.step == "status":
         status(*a.args)
     elif a.step == "check":
