@@ -171,9 +171,13 @@ def status(wave: str = WAVE) -> None:
     d = LAB / wave
     n = len(list(d.glob("batch_*.jsonl")))
     for sub_ in ("A", "B"):
-        done = sorted(int(f.stem.split("_")[1]) for f in (d / sub_).glob("labels_*.csv"))
+        have = sorted(int(f.stem.split("_")[1]) for f in (d / sub_).glob("labels_*.csv"))
+        bad = [i for i in have if check(str(d / sub_ / f"labels_{i}.csv"),
+                                        str(d / f"batch_{i}.jsonl"), quiet=True)]
+        done = [i for i in have if i not in bad]
         todo = [i for i in range(n) if i not in set(done)]
-        print(f"read {sub_}: {len(done)} of {n} done; next to do: {todo[:12]}")
+        print(f"read {sub_}: {len(done)} of {n} valid; failing the checker: {bad}; "
+              f"next to do: {todo[:12]}")
 
 
 def check(labels_csv: str, batch_jsonl: str, quiet: bool = False) -> int:
