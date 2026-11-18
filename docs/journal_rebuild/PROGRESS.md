@@ -53,6 +53,14 @@ Protocol commit hash: `ef852d252226fd905b1a40a798dc6cc40956cca1` (committed 2026
 | `labels.py` | Reader batches, CSV checker, agreement between reads, adjudication batches |
 | `label_funnel.py` | Merged label table, funnel steps 9–16 (`journal.post_label`, `journal.post_funnel`), `funnel.md` |
 | `xlmr_score.py` | Standalone XLM-R scorer |
+| `models.py`, `baseline.py` | Shared modelling core (splits, seeds, bootstrap, scores); state baseline search and re-dating report |
+| `authors.py` | X author-type reader batches, checker, agreement, adjudication, `journal.author_type`, `journal.post_tag` |
+| `extras.py` | `journal.state_week_extra` (WHISPers and GDELT state-week features), `journal.gdelt_state_day` |
+| `tracks.py` | Track A and Track B on both platforms; Track A is resumable per platform and horizon (`track_a_part_*.pkl`) |
+| `mechanism.py` | News-echo mechanism checks (protocol 9) |
+| `sensitivity.py` | Sensitivity checks on both primaries (protocol 8.6); resumable per check |
+| `county.py` | County baseline C3: cached modelling rows, search, test scores, roll-up to state-weeks (protocol 8.4) |
+| `kappa.py` | Human validation: sample draw, coder workbooks, agreement analysis (protocol 11) |
 
 Documents: `GUIDE_reader.md` (version J1), `PROTOCOL.md` (gate 1 draft).
 
@@ -408,11 +416,249 @@ has no human check yet.
 **Cost and limits measured.** A reader run uses 125k-165k Sonnet tokens and 3-4 minutes, about
 0.5% of a 5-hour usage window. The harness refuses more than 64 concurrent subagents.
 
-**Not started.** X author typing (23 batches, guide `GUIDE_author.md`, unpiloted), the county baseline,
-Tracks A and B, sensitivity and mechanism checks, WHISPers and GDELT state-week features, the
-kappa packets (gate 2), the paper.
+## Update, 2026-11-18, third session
 
-**Next step.** Post labelling, adjudication, the merged label table and funnel steps 9-16 are
-done. Next: the work that needs no readers (WHISPers and GDELT state-week features, county
-baseline, Track A features), and X author typing (needs a reader count from Nick). Labelling of Max's re-pulled X waits for the
-data.
+*This section is current; it supersedes the "Not started" and "Next step" notes that used to
+end this file.*
+
+**Track A had died mid-run** in the previous session (log stopped at Meta k = 28, no result
+files). `tracks.py a` now saves each finished platform and horizon and resumes from them; it
+was rerun from the start.
+
+**Mechanism checks (protocol 9; `mechanism.py`, k = 14, 2,000 week-block replicates).** Files in
+`data\journal\models\`: `mechanism_cells.csv`, `mechanism_interaction.csv`,
+`mechanism_timing.csv`, `mechanism_timing_rows.parquet`, `mechanism_dropped.csv`,
+`mechanism_proxy.csv`, `mechanism_news.csv`, `mechanism_panel.parquet`, `mechanism.log`. A
+state-week is sighted for a group if it has a sighting post of that group; the reference is
+always the state-weeks with no sighting post on that platform. The gap-0 "all" rows reproduce
+Track B exactly (Meta 1.21, 136 of 290, 112.9 expected; X 1.13, 161 of 418).
+
+Sighted test state-weeks by group: Meta wildlife report 251, first-hand 80, news-like 285,
+personal 12; X wildlife report 410, first-hand 19, news-like 413, personal 12. Almost every
+sighted state-week is news-like on both platforms, so the news-like cell is nearly the
+whole-platform result and the personal cell cannot be estimated.
+
+O/E ratio at k = 14, test period, by days excluded from the start of the outcome window (the
+estimand of the timing test):
+
+| Group | Platform | 0 days | 3 days | 5 days | 7 days | 10 days |
+|---|---|---|---|---|---|---|
+| All | Meta | 1.21 (1.06, 1.37) | 1.26 (1.06, 1.47) | 1.19 (0.96, 1.41) | 1.19 (0.96, 1.41) | 1.43 (1.10, 1.82) |
+| All | X | 1.13 (0.97, 1.31) | 1.18 (1.00, 1.38) | 1.27 (1.06, 1.51) | 1.26 (1.04, 1.51) | 1.40 (1.08, 1.79) |
+| Wildlife report | Meta | 1.22 (1.06, 1.40) | 1.31 (1.10, 1.55) | 1.24 (1.00, 1.49) | 1.24 (1.00, 1.49) | 1.47 (1.11, 1.88) |
+| Wildlife report | X | 1.15 (0.98, 1.32) | 1.19 (1.01, 1.40) | 1.28 (1.07, 1.52) | 1.27 (1.05, 1.52) | 1.41 (1.08, 1.80) |
+| First-hand | Meta | 1.22 (0.94, 1.50) | 1.12 (0.85, 1.43) | 1.05 (0.72, 1.40) | 1.04 (0.71, 1.40) | 1.19 (0.66, 1.86) |
+| First-hand | X | 0.78 (0.31, 1.29) | 0.91 (0.38, 1.51) | 1.00 (0.33, 1.71) | 1.01 (0.33, 1.72) | 1.28 (0.00, 2.37) |
+| Personal | Meta | 1.28 (0.70, 2.02) | 0.83 (0.17, 1.66) | 0.75 (0.00, 1.79) | 0.75 (0.00, 1.80) | 1.08 (0.00, 3.00) |
+| Personal | X | 1.09 (0.43, 1.77) | 1.30 (0.56, 2.17) | 1.36 (0.39, 2.28) | 1.37 (0.39, 2.30) | 1.45 (0.00, 2.77) |
+
+- The 5- and 7-day columns are nearly identical because no confirmation in the data is dated
+  on a Saturday or Sunday.
+- **The ratio does not shrink when the first days are excluded.** On both platforms it is as
+  large or larger with a 10-day exclusion (only days 11 to 14 count) as with none. A signal
+  that was only news of an outbreak awaiting confirmation would fade as the window moves away
+  from the post; this one does not.
+- **The signal sits in wildlife reports.** First-hand posts show no clear excess on either
+  platform once the first days are excluded (Meta 1.05 at 5 days), with wide intervals; the
+  personal cells have 12 state-weeks each and are inconclusive.
+- **The platforms do not differ.** Pooled offset-logistic model, tag by platform: the
+  news-like odds ratio on Meta relative to X is 1.15 (0.82, 1.62) at 0 days and 0.95 (0.70,
+  1.28) at 5 days; the ratio of the two O/E ratios is 1.06 (0.89, 1.26) and 0.94 (0.78, 1.12).
+  For wildlife reports: 1.12 (0.77, 1.59) and 1.01 (0.74, 1.38). First-hand: 2.47 (0.69,
+  9.32) at 0 days, 1.11 (0.30, 4.97) at 5. Personal: 1.50 (0.17, 13.8). Bootstrap replicates
+  that failed to fit (an empty cell): 4 to 123 of 2,000, most in the personal model.
+- **News-volume control.** With the state's 7-day GDELT story count and share added to S3 (196
+  state-weeks with unknown GDELT dropped from both models), the Meta ratio is 1.18 (1.04,
+  1.34) against 1.20 (1.05, 1.35) for S3 on the same rows; X 1.12 (0.96, 1.29) against 1.13
+  (0.97, 1.30). S3 + news does not rank better than S3 (PR-AUC 0.550 against 0.549, all rows).
+  The Meta effect does not disappear.
+- **Timing (description).** Of 292 Meta sighted test state-weeks, the next confirmation in the
+  state came within 3 days of the first sighting post for 76, within 7 for 113, within 14 for
+  150; median 5 days among those within 28. X: 76, 126 and 184 of 419; median 7 days.
+- **First-public-report proxy (GDELT): it does not discriminate.** For 121 of the 136 followed
+  Meta sightings (142 of 161 on X) a GDELT story naming the state already existed in the 14
+  days before the confirmation and before the post. A state with outbreaks has avian-influenza
+  news nearly every week, and the proxy cannot tell a story about this flock from any other
+  story. Removing those sightings leaves O/E ratios of 0.30 and 0.26, which are lower bounds
+  with no interpretive value. The paper should report the proxy as uninformative, not as
+  evidence for or against the echo.
+- **WHISPers reference.** An HPAI-diagnosed WHISPers record in the state in the 14 days before
+  the confirmation exists for only 22 of 136 followed Meta sightings (17 of 161 on X); 13 and
+  10 of those were posted on or after the record's lower-bound date. Without them the ratios
+  are 1.17 (1.01, 1.33) and 1.11 (0.94, 1.28).
+- **Descriptive only:** removing sighted state-weeks whose confirmation came within N days of
+  the Sunday drives the ratio below 1 at every N (0.90 at 3 days, 0.55 at 5, 0.21 at 10 on
+  Meta). This selects on the outcome, as the protocol says, and is not an estimate.
+
+**Reading, under the protocol's two framings.** The signal does not vanish under the exclusion
+windows or the news control, so it is not explained by the announcement-to-confirmation
+interval. It does not sit in first-hand posts either; it sits in relayed reports of wild-bird
+and mammal die-offs, on both platforms about equally. So neither framing fits cleanly: the
+supportable statement is that news and agency reports of local wildlife die-offs, as they
+circulate on social media, are followed by more poultry outbreaks than the baseline expects
+over the following two weeks. Whether that adds to official wild-bird surveillance is what the
+S3 + WHISPers check tests (below). Not independently recomputed.
+
+**Departures and defaults in the mechanism checks.**
+- The exclusion gap is counted from the forecast Sunday, not from the post (the protocol says
+  "after the post"). The Sunday is on or after the post, so this is at least as strict.
+- A group's reference is state-weeks with no sighting post at all; state-weeks sighted only by
+  another group are left out of that group's comparison.
+- The proxy and WHISPers recomputations remove the "after" sightings (only sightings that were
+  followed can be classed), so they are lower bounds.
+
+**Track A, both platforms (`tracks.py a`, searched forest, five seeds, 2,000 week-block
+replicates).** Files in `data\journal\models\`: `track_a_lift.csv`, `track_a_arms.csv`,
+`track_a_offset.csv`, `track_a_permutation.csv`, `track_a_coverage.csv`, `track_a_meta.csv`,
+`track_a_reliability.csv`, `track_a_oof_<platform>_<variant>_k<k>.csv`, `track_a.log`.
+Sentiment set 19,342 Meta and 33,304 X posts; shrinkage pseudocount 3.41 and 4.66. Rows are
+covered test state-weeks (at least one post in the 7 days): at k = 14, 1,148 of 3,822 on Meta
+and 1,316 on X; 490 and 585 of them are new onsets, with 86 and 96 events (of 254 new-onset
+event state-weeks in the test period, so about a third of the events are on covered rows).
+
+S4 − S3 PR-AUC on new-onset state-weeks:
+
+| | Meta | X |
+|---|---|---|
+| **Primary: k = 14** | **−0.000 (−0.013, +0.011)**; S3 0.353, S4 0.353 | **−0.002 (−0.010, +0.006)**; S3 0.378, S4 0.376 |
+| Post windows ending 5 days early | −0.004 (−0.014, +0.005) | +0.002 (−0.003, +0.006) |
+| Post windows ending 3 days early | −0.004 (−0.012, +0.006) | −0.007 (−0.018, +0.000) |
+| Reading rule (interval above 0 and 5-day estimate positive) | **not met** | **not met** |
+| k = 7 | +0.001 (−0.011, +0.013) | −0.001 (−0.011, +0.011) |
+| k = 28 | +0.001 (−0.004, +0.006) | +0.003 (−0.005, +0.008) |
+| k = 14, all rows | −0.001 (−0.002, +0.001) | −0.000 (−0.001, +0.001) |
+| k = 14, 2025-Q1 | −0.003 (−0.027, +0.016) | −0.003 (−0.012, +0.031) |
+| k = 14, later weeks | +0.001 (−0.014, +0.015) | −0.004 (−0.012, +0.003) |
+| k = 14, at least 5 posts | −0.001 (−0.034, +0.019) | −0.007 (−0.023, +0.015) |
+| k = 14, volume only (S4v − S3) | −0.005 (−0.021, +0.006) | −0.002 (−0.009, +0.005) |
+| k = 14, sentiment only (S4s − S3) | −0.003 (−0.012, +0.004) | −0.004 (−0.011, +0.001) |
+| k = 14, residualised features | −0.009 (−0.022, −0.001) | −0.003 (−0.010, +0.005) |
+| k = 14, block permutation gain (p) | +0.005 (0.18) | −0.003 (0.90) |
+| k = 14, S2 − S0 (no epidemiology) | −0.017 (−0.048, +0.014) | −0.036 (−0.077, −0.001) |
+
+- **Posts add nothing to the baseline on either platform at any horizon.** The upper bounds
+  say the largest gain the data allow at k = 14 is about +0.011 PR-AUC on Meta and +0.006 on
+  X, against a baseline of 0.35 to 0.38.
+- Posts alone (S1) rank no better than chance on new onsets (lift 1.08 on Meta, 0.82 on X),
+  and adding them to place and season (S2 − S0) does not help.
+- Seed standard deviation of the new-onset PR-AUC is 0.005 to 0.009, the same size as the
+  differences. Brier scores are equal with and without posts (0.132 on Meta, 0.121 on X).
+- One secondary points the other way: in the offset logistic model on new onsets, the state's
+  share of posts has a positive coefficient per standard deviation (Meta +0.21, SE 0.10,
+  p = 0.04; X +0.21, SE 0.08, p = 0.007); sentiment terms are null. The offset there is the
+  forest's raw prediction, not a calibrated one, and no multiplicity correction is applied, so
+  this is weak; it does not appear as a ranking gain (S4v − S3 above).
+- Not independently recomputed, except that `sensitivity.py` reproduces the two primary
+  figures through a separate code path.
+
+**County baseline C3 and its roll-up (protocol 4.3 and 8.4; `county.py`).** Files in
+`data\journal\models\`: `county_sample_<dating>.parquet`, `county_search.csv`,
+`chosen_county.json`, `county_scores.csv`, `county_reliability.csv`,
+`county_rollup_preds.csv`, `county_rollup.csv`.
+- **Rows.** 968,124 contiguous-US county-days from 2022-02-08: every positive, a 5% hash
+  sample of the rest (negatives weighted 20 in training), and every county-Sunday. Validation
+  and test rows are county-Sundays, unsampled. This is a default: the protocol says "all rows".
+- **Search** (2022-2024 folds, k = 7, one seed per fit, also a default): chosen 500 trees,
+  depth 12, min leaf 50, features one third, mean PR-AUC 0.0945 against 0.0908 for Waree's
+  setting. The whole grid spans 0.088 to 0.095, so the choice is weakly determined.
+- **County test scores** (county-Sundays 2025+, five seeds), PR-AUC and lift over the base rate:
+
+  | k | Events | Searched, detected | Waree, detected | Searched, collection |
+  |---|---:|---|---|---|
+  | 7 | 622 of 245,532 | 0.143 (57x) | 0.157 (62x) | 0.143 |
+  | 14 | 1,112 of 242,424 | 0.128 (28x) | 0.137 (30x) | 0.131 |
+  | 28 | 1,973 of 236,208 | 0.128 (15x) | 0.135 (16x) | 0.132 |
+
+  As at state level, Waree's fixed setting beats the searched one on the test period although
+  the development folds preferred the searched one. Re-dating wild birds costs the county
+  model 0.003 to 0.004 at k = 14 and 28 and nothing at k = 7.
+- **Roll-up against S3** (S3 − roll-up PR-AUC, all test state-weeks; S3 is the searched state
+  forest, detected dating):
+
+  | k | Slice | Searched C3 | Waree C3 |
+  |---|---|---|---|
+  | 7 | all | −0.031 (−0.051, −0.011) | −0.019 (−0.039, +0.002) |
+  | 7 | new onset | −0.016 (−0.048, +0.017) | +0.027 (−0.005, +0.063) |
+  | 14 | all | −0.013 (−0.030, +0.005) | +0.003 (−0.015, +0.020) |
+  | 14 | new onset | −0.025 (−0.063, +0.009); S3 0.254, roll-up 0.279 | +0.031 (−0.003, +0.068) |
+  | 28 | all | +0.003 (−0.016, +0.021) | +0.018 (+0.001, +0.035) |
+  | 28 | new onset | −0.028 (−0.065, +0.013) | +0.049 (+0.004, +0.089) |
+
+  **This differs from the earlier exploratory result**, where S3 beat the roll-up on new
+  onsets at k = 14 by +0.042 (+0.014, +0.075). With Waree's county forest the direction is the
+  same as before (+0.031). With the searched county forest the roll-up is at least as good as
+  S3 on every slice and better at k = 7 on all rows. So which model wins depends on the county
+  forest's settings, and the earlier "S3 for which state" reading is not robust to them.
+- **On each platform's Track A rows** (covered state-weeks), neither S3 nor S4 differs from the
+  roll-up on new onsets at k = 14 (Meta S4 − roll-up +0.033 (−0.050, +0.121); X +0.034 (−0.035,
+  +0.096)), and S4 − roll-up equals S3 − roll-up to the third decimal, as it must given the
+  Track A null.
+- **Reading (protocol 8.4).** The roll-up comparison does not decide whether social media is
+  used; Track A does, and it is null. The comparison now says only that the county model,
+  summarised to states, is not worse than the state model.
+- The collection-dated roll-up rows in `county_rollup.csv` are compared with the
+  detected-dated S3, so they mix datings; use `county_scores.csv` for the re-dating effect.
+- Not independently recomputed. `county.py rollup` ran once, with no smoke test before it.
+
+**Sensitivity checks (protocol 8.6; `sensitivity.py`, k = 14 unless stated, 2,000 replicates).**
+Files in `data\journal\models\`: `sensitivity_a.csv`, `sensitivity_b.csv`,
+`sensitivity_counts.csv`, `sensitivity.log`. The "nothing changed" row reproduces Track B
+exactly. Track A is S4 − S3 PR-AUC on new-onset state-weeks; Track B is the O/E ratio on all
+sightings, then with the first 5 days excluded.
+
+| Check | Track A, Meta | Track A, X | Track B, Meta (0 d; 5 d) | Track B, X (0 d; 5 d) |
+|---|---|---|---|---|
+| Nothing changed | −0.000 (−0.013, +0.011) | −0.002 (−0.010, +0.006) | 1.21 (1.06, 1.37); 1.19 | 1.13 (0.97, 1.31); 1.27 |
+| Collection-date wild birds | +0.001 (−0.011, +0.013) | +0.002 (−0.004, +0.007) | 1.18 (1.03, 1.33); 1.17 | 1.11 (0.95, 1.27); 1.25 |
+| Waree's forest | +0.006 (−0.009, +0.022) | +0.001 (−0.006, +0.012) | 1.21 (1.06, 1.37); 1.19 | 1.14 (0.99, 1.31); 1.29 |
+| S3 + WHISPers baseline | +0.005 (−0.014, +0.022) | +0.003 (−0.004, +0.008) | 1.21 (1.06, 1.37); 1.18 | 1.13 (0.97, 1.30); 1.27 |
+| No poultry words | −0.013 (−0.026, +0.006) | −0.002 (−0.009, +0.004) | 1.17 (1.01, 1.35); 1.15 | 1.14 (0.96, 1.32); 1.32 |
+| No top-1% authors | −0.003 (−0.015, +0.008) | +0.005 (−0.008, +0.015) | 1.20 (1.04, 1.35); 1.21 | 1.10 (0.88, 1.35); 1.14 |
+| X profile state | n/a | −0.000 (−0.006, +0.004) | n/a | 1.13 (0.98, 1.30); 1.30 |
+| k = 30, 30-day onset | +0.001 (−0.006, +0.008) | +0.001 (−0.003, +0.006) | 1.28 (1.17, 1.39); 1.25 | 1.28 (1.16, 1.39); 1.32 |
+
+- **Track A is null under every check on both platforms.** No interval excludes zero on the
+  positive side. (These Track A figures come from `sensitivity.py`; the full `tracks.py a` run,
+  with all arms and secondaries, is recorded separately below once it finishes.)
+- **The Meta Track B result holds under every check**: the lower bound stays above 1 with no
+  days excluded, and the 5-day estimate stays above 1. Adding WHISPers avian-event counts to
+  the baseline does not reduce it (1.21), so the sightings are not just restating WHISPers.
+- **X stays short of the reading rule at k = 14** in every check with no days excluded, and
+  exceeds 1 clearly with 5 days excluded or at the 30-day horizon.
+- **Top authors.** Dropping the top 1% of authors removes 72% of X sighting posts (3,232 to
+  908) and 46% of X sentiment posts; 106 sighted X test state-weeks remain, ratio 1.10 (0.88,
+  1.35). On Meta it removes 5% of sighting posts and changes nothing.
+- **Poultry words.** 32% of Meta and 23% of X sentiment-set posts contain one; the Meta ratio
+  falls slightly, to 1.17 (1.01, 1.35).
+- **30-day onset at k = 14 is identical to 28-day** on every row: the two definitions differ
+  only by confirmations dated on a Saturday or Sunday, and the data have none.
+- New-onset Track B cells (Meta 26 of 95 followed, ratio 1.50 (1.07, 1.98)) are in the CSV.
+
+**Defaults in the sensitivity checks.** A poultry word is the English and Spanish list in
+`POULTRY_RE` (it catches "Turkey" the country on purpose). Top authors are the top 1% of each
+platform's authors by reader-set posts dated through 2024 (Meta 58 of 5,701 authors, at least 20 posts each; X 104 of 10,342, at least 25 each). The
+profile-state check uses the X profile state where one exists (10,955 posts; it differs from
+the text state for 5,436) and re-admits sighting candidates removed at step 15 when their
+profile state is on the grid. Not independently recomputed.
+
+**Human validation packets (gate 2; `kappa.py`).** 400 posts drawn once (seed 20261118) from
+the 66,590 labelled posts, stratified by platform, language and stratum; the stratum is the
+first that applies of: sighting post (100), readers disagreed (60), not relevant or not one
+state (40), then content class (50 each). Within a stratum the split is 35% each for English
+Meta and X and 15% each for Spanish, with a small cell's surplus given to the others (there is
+no Spanish first-hand Meta post outside the earlier strata, and one on X). 345 distinct authors.
+- `docs\journal_rebuild\coding\coding_Nick.xlsx`, `coding_Max.xlsx`, `coding_Waree.xlsx`
+  (ignored by git through `*.xlsx`): sheet "Posts" (date, language, first 1,500 characters;
+  drop-downs for `relevant`, `sick_dead_local`, `content_class`, `state_correct`) and sheet
+  "Authors" (name, handle and bio, or Facebook type; `author_type`), each in a different order
+  per coder, with a made-up example row.
+- `docs\journal_rebuild\coding\CODER_GUIDE.md` (one page) and `sample_design.csv` (cell
+  populations, sample sizes, weights).
+- The key linking items to posts, strata and reader labels is in `data\journal\coding\`
+  (`sample_key.parquet`, `sample_weights.csv`), outside the folder the coders open.
+- The human sighting question bundles the reader fields `illness`, `local_place` and `exclude`
+  into one yes/no (`sick_dead_local`); a human sighting is that answer plus a wildlife or
+  first-hand class. Author type is coded on its own sheet without posts, as the readers did it.
+- `kappa.py analyse` was tested on simulated coder files (reader labels with 10% noise): it
+  runs end to end, and the test caught a row-alignment error in the derived sighting field,
+  now fixed. Real agreement is pending the three coded files.

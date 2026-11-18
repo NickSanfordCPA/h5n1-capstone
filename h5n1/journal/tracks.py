@@ -190,6 +190,15 @@ def track_a() -> None:
                   for lag in (0, 3, 5)}
         variants = {"primary": (0, 1), "min5": (0, 5), "embargo3": (3, 1), "embargo5": (5, 1)}
         for k in M.KS:
+            # Resumable: each finished (platform, k) is saved; delete the part files to recompute.
+            part = out / f"track_a_part_{plat}_k{k}.pkl"
+            lists = {"lift": lift, "arms": arms_tab, "off": off, "perm": perm, "cov": cov, "rel": rel}
+            if part.exists():
+                for name, rows in pd.read_pickle(part).items():
+                    lists[name].extend(rows)
+                print(f"{plat} k={k}: resumed from {part.name}", flush=True)
+                continue
+            start = {name: len(rows) for name, rows in lists.items()}
             for name, (lag, min_posts) in variants.items():
                 df = panels[lag]
                 df = df[df.n_posts_7d >= min_posts].reset_index(drop=True)
@@ -243,6 +252,7 @@ def track_a() -> None:
                                 "covered_5": int((gg.n_posts_7d >= 5).sum()),
                                 "event_state_weeks": len(pos),
                                 "events_on_covered": int((pos.n_posts_7d >= 1).sum())})
+            pd.to_pickle({name: rows[start[name]:] for name, rows in lists.items()}, part)
     for label, rows in {"lift": lift, "arms": arms_tab, "offset": off, "permutation": perm,
                         "coverage": cov, "meta": meta}.items():
         pd.DataFrame(rows).to_csv(out / f"track_a_{label}.csv", index=False)
@@ -275,10 +285,14 @@ def gap_target(sw: pd.DataFrame, k: int, gap: int) -> np.ndarray:
     return np.where(sw[f"y{k}"].notna(), y, np.nan)
 
 
-def expected_risk(t: pd.DataFrame, ycol: str, k: int, params: dict) -> tuple[np.ndarray, np.ndarray]:
+def expected_risk(t: pd.DataFrame, ycol: str, k: int, params: dict,
+                  cols: list[str] | None = None) -> tuple[np.ndarray, np.ndarray]:
     """Calibrated S3 risk. Returns (test, development): the test risk comes from S3 fitted on
     every development row and a Platt map fitted on leave-one-season-out development scores;
-    the development risk is those cross-fitted scores through the same map."""
+    the development risk is those cross-fitted scores through the same map. `cols` replaces
+    S3 with another baseline column set (S3 + news, S3 + WHISPers); extra columns must have
+    no NULLs."""
+    cols = cols or M.S3
     known = t[ycol].notna().to_numpy()
     train = known & (t.day + pd.Timedelta(days=k) <= M.DEV_END).to_numpy()
     test = known & (t.day >= M.TEST_FIRST).to_numpy()
@@ -286,10 +300,10 @@ def expected_risk(t: pd.DataFrame, ycol: str, k: int, params: dict) -> tuple[np.
     cf = np.full(len(t), np.nan)
     for g in np.unique(s[train]):
         tr, te = train & (s != g), train & (s == g)
-        X = M.prepare(t, M.S3, tr)
+        X = M.prepare(t, cols, tr)
         cf[te] = M.fit_predict(X[tr], t.loc[tr, ycol], X[te], params).mean(axis=0)
     lr = LogisticRegression(C=1e6).fit(logit(cf[train]).reshape(-1, 1), t.loc[train, ycol])
-    X = M.prepare(t, M.S3, train)
+    X = M.prepare(t, cols, train)
     e_test, e_dev = np.full(len(t), np.nan), np.full(len(t), np.nan)
     p = M.fit_predict(X[train], t.loc[train, ycol], X[test], params).mean(axis=0)
     e_test[test] = lr.predict_proba(logit(p).reshape(-1, 1))[:, 1]

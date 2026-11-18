@@ -1039,6 +1039,7 @@ dev = [
 journal = [
     { name = "krippendorff" },
     { name = "lingua-language-detector" },
+    { name = "openpyxl" },
 ]
 ml = [
     { name = "accelerate" },
@@ -1073,6 +1074,7 @@ requires-dist = [
     { name = "nbconvert", marker = "extra == 'dev'", specifier = ">=7.16" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "openpyxl", specifier = ">=3.1" },
+    { name = "openpyxl", marker = "extra == 'journal'", specifier = ">=3.1" },
     { name = "pandas", specifier = ">=2.2" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
     { name = "pyarrow", specifier = ">=17.0" },
