@@ -143,7 +143,7 @@ def status(wave: str = WAVE) -> None:
         print(f"read {sub_}: {len(done)} of {n} done; next to do: {todo[:12]}")
 
 
-def check(labels_csv: str, batch_jsonl: str) -> int:
+def check(labels_csv: str, batch_jsonl: str, quiet: bool = False) -> int:
     """Validate one reader CSV against its batch. Prints problems; exit code 1 if any."""
     ids = [json.loads(line)["id"] for line in open(batch_jsonl, encoding="utf-8")]
     with open(labels_csv, encoding="utf-8", newline="") as f:
@@ -175,9 +175,10 @@ def check(labels_csv: str, batch_jsonl: str) -> int:
         if r.get("relevant") == "no" and (r.get("topic") != "off_topic"
                                           or r.get("content_class") != "other"):
             errs.append(f"{i}: relevant=no needs topic=off_topic and content_class=other")
-    for e in errs[:40]:
-        print("PROBLEM:", e)
-    print("OK" if not errs else f"{len(errs)} problems")
+    if not quiet:
+        for e in errs[:40]:
+            print("PROBLEM:", e)
+        print("OK" if not errs else f"{len(errs)} problems")
     return 1 if errs else 0
 
 
@@ -232,9 +233,132 @@ def agree(wave: str) -> None:
           f"({len(dis) / len(ids):.1%}); written to disagreements.csv")
 
 
+ADJ_BATCH = 100
+ADJ_INSTRUCTIONS = """# Adjudicator instructions ({wave})
+
+You are adjudicating social-media posts that two independent readers labelled differently.
+Do not spawn any subagents. You are given a BATCH number n.
+
+1. Read the guide in full first:
+   `C:\\Users\\NickS\\Desktop\\Harvard\\Capstone\\docs\\journal_rebuild\\GUIDE_reader.md`
+2. Your batch file (one post per line, JSON):
+   `{d}\\batch_<n>.jsonl`
+   Each line has the post (`id`, `date`, `lang`, `text`, `truncated`) and the two readers'
+   answers, `read_1` and `read_2`. Which reader is 1 and which is 2 was shuffled per post, so
+   neither is more trustworthy. The readers differ on at least one of: `relevant`,
+   `content_class`, `place_state`, or whether the post is a sighting candidate (relevant=yes,
+   illness=yes, local_place=yes, exclude blank, content_class wildlife_report or first_hand).
+3. Your own scratch folder (create it; use ONLY this folder for scratch files):
+   `{d}\\tmp_<n>`
+4. Write your output CSV to:
+   `{d}\\labels_<n>.csv`
+   Header exactly: `id,relevant,topic,content_class,local_place,illness,exclude,place_state,place_name`
+   One row per post: the correct label under the guide, in the guide's own format.
+5. Then run the checker from `C:\\Users\\NickS\\Desktop\\Harvard\\Capstone` and fix anything it
+   reports until it prints OK:
+   `uv run python -m h5n1.journal.labels check "{rel}/labels_<n>.csv" "{rel}/batch_<n>.jsonl"`
+
+Rules:
+
+- Read every post yourself, in chunks of 20-30 lines with the Read tool, and decide each field
+  by applying the guide to the text. The readers' answers are evidence, not a menu: usually
+  one of them is right on each field, but if the guide gives a third answer, give that.
+- Decide every field, not only the ones that differ, and keep the row internally consistent
+  under the guide (the checker enforces some of this).
+- Do NOT decide with keyword or regex scripts, and do not default to either reader. A script
+  may only write out the answers you decided (record decisions chunk by chunk in your scratch
+  folder, then assemble the CSV with Python's csv module via `uv run python`).
+- Do not read any other file in the labels folder, and never another adjudicator's folder or
+  output.
+- If the checker cannot be made to print OK, say so plainly in your reply.
+
+Final reply, nothing else: the single word `OK` if the checker printed OK, otherwise one line
+saying what failed.
+"""
+
+
+def adjbatches(wave: str, seed: int = 20261118) -> None:
+    """Fix the adjudication batches for one wave: every post in disagreements.csv, with its text
+    and both reads in a per-post shuffled order (read_1, read_2), so the adjudicator cannot tell
+    read A from read B. The shuffle key is kept outside the adj folder. Refuses to overwrite."""
+    import numpy as np
+
+    w = LAB / wave
+    d = w / "adj"
+    if (d / "manifest.csv").exists():
+        raise SystemExit(f"{d} already has a manifest; batches are fixed and are not rebuilt")
+    dis = pd.read_csv(w / "disagreements.csv", dtype=str, keep_default_na=False)
+    r = load_reads(w)
+    a = r[r["read"] == "A"].set_index("id")
+    b = r[r["read"] == "B"].set_index("id")
+    posts = {}
+    for n in sorted(set(a["batch"])):
+        for line in open(w / f"batch_{n}.jsonl", encoding="utf-8"):
+            p = json.loads(line)
+            posts[p["id"]] = p
+    ids = sorted(dis["id"])
+    rng = np.random.default_rng(seed)
+    order = rng.permutation(len(ids))
+    a_first = rng.random(len(ids)) < 0.5
+    d.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for k, j in enumerate(order):
+        i = ids[j]
+        ra = {f: a.at[i, f] for f in FIELDS[1:]}
+        rb = {f: b.at[i, f] for f in FIELDS[1:]}
+        r1, r2 = (ra, rb) if a_first[j] else (rb, ra)
+        rows.append({"batch": k // ADJ_BATCH, "id": i, "read_1": "A" if a_first[j] else "B",
+                     "line": json.dumps({**posts[i], "read_1": r1, "read_2": r2},
+                                        ensure_ascii=False)})
+    m = pd.DataFrame(rows)
+    for n, g in m.groupby("batch"):
+        (d / f"batch_{n}.jsonl").write_text("\n".join(g["line"]) + "\n", encoding="utf-8")
+    m[["batch", "id"]].to_csv(d / "manifest.csv", index=False)
+    m[["id", "read_1"]].to_csv(w / "adj_key.csv", index=False)
+    rel = f"data/journal/labels/{wave}/adj"
+    (d / "ADJ_INSTRUCTIONS.md").write_text(
+        ADJ_INSTRUCTIONS.format(wave=wave, d=str(d), rel=rel), encoding="utf-8")
+    print(f"{len(m):,} posts in {m['batch'].nunique()} adjudication batches under {d}")
+
+
+def adjstatus(wave: str) -> None:
+    """Which adjudication batches are done; every CSV present is run through the checker."""
+    d = LAB / wave / "adj"
+    n = len(list(d.glob("batch_*.jsonl")))
+    ok, bad = [], []
+    for i in range(n):
+        f = d / f"labels_{i}.csv"
+        if f.exists():
+            (bad if check(str(f), str(d / f"batch_{i}.jsonl"), quiet=True) else ok).append(i)
+    todo = [i for i in range(n) if i not in ok and i not in bad]
+    print(f"adjudication {wave}: {len(ok)} of {n} valid; failing: {bad}; not written: {todo}")
+
+
+def adjsummary(wave: str) -> None:
+    """How the adjudicator decided, per analysis field: with read A, with read B, or neither."""
+    w = LAB / wave
+    adj = pd.concat([pd.read_csv(f, dtype=str, keep_default_na=False)
+                     for f in sorted((w / "adj").glob("labels_*.csv"))], ignore_index=True)
+    adj = derive(adj).set_index("id")
+    r = derive(load_reads(w))
+    a = r[r["read"] == "A"].set_index("id").loc[adj.index]
+    b = r[r["read"] == "B"].set_index("id").loc[adj.index]
+    print(f"{len(adj):,} adjudicated posts in {wave}")
+    for col in ["relevant", "content_class", "place_state", "sighting_candidate"]:
+        x, ya, yb = adj[col].astype(str), a[col].astype(str), b[col].astype(str)
+        diff = ya != yb
+        print(f"  {col:20s} readers differed on {int(diff.sum()):5d}: with A "
+              f"{int((diff & (x == ya)).sum()):5d}, with B {int((diff & (x == yb)).sum()):5d}, "
+              f"neither {int((diff & (x != ya) & (x != yb)).sum()):4d}; "
+              f"readers agreed but overruled {int((~diff & (x != ya)).sum()):4d}")
+    print("  sighting candidates: A", int(a["sighting_candidate"].sum()), " B",
+          int(b["sighting_candidate"].sum()), " adjudicated", int(adj["sighting_candidate"].sum()))
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("step", choices=["pilot", "batches", "focus", "status", "check", "agree"])
+    ap.add_argument("step", choices=["pilot", "batches", "focus", "status", "check", "agree",
+                                     "adjbatches", "adjstatus", "adjsummary"])
     ap.add_argument("args", nargs="*")
     a = ap.parse_args()
     if a.step == "pilot":
@@ -247,5 +371,7 @@ if __name__ == "__main__":
         status(*a.args)
     elif a.step == "check":
         sys.exit(check(*a.args))
+    elif a.step in ("adjbatches", "adjstatus", "adjsummary"):
+        globals()[a.step](a.args[0])
     else:
         agree(a.args[0])

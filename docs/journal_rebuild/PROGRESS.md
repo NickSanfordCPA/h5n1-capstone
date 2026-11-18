@@ -239,19 +239,58 @@ class 0.947, local place 0.946, illness 0.922, exclude 0.917, place kind 0.923, 
 0.967, sighting candidate 0.947. Sighting candidates: A 1,546, B 1,552, both 1,474. The largest
 content-class confusion is domestic detection against other (206 and 131).
 
-Agreement on wave 1 (as reported by Nick from a run between sessions, on 27,900 posts): kappa
-0.85-0.96 on every field, content class 0.94, sighting candidate 0.95. It should be rerun now
-that batches 84 and 86 have both reads.
+Agreement on wave 1, rerun 2026-11-18 on all 28,500 twice-read posts (`labels agree wave1`):
+kappa relevant 0.909, topic 0.847, content class 0.939, local place 0.956, illness 0.919,
+exclude 0.926, place kind 0.893, place state 0.953, sighting candidate 0.949. Sighting
+candidates: A 2,110, B 2,123, both 2,016. 2,182 posts (7.7%) differ on an analysis field.
+The largest content-class confusion is again domestic detection against other (321 and 250).
+
+**Adjudication (2026-11-18).** `labels.py adjbatches <wave>` fixes the adjudication batches
+(refuses to rebuild): every post in the wave's `disagreements.csv`, 100 per batch, in
+`data\journal\labels\<wave>\adj\`. Each line carries the post and both reads as `read_1` and
+`read_2`, shuffled per post so the adjudicator cannot tell read A from read B (key in
+`<wave>\adj_key.csv`, outside the folder the adjudicator reads). One fresh Opus subagent per
+batch reads the guide and gives one full label row per post; it may give a third answer where
+the guide requires one. Its CSV must pass the same `labels check`. Wave 1: 2,182 posts, 22
+batches. `wave1f`: 1,276 posts, 13 batches. `labels adjstatus <wave>` runs the checker;
+`labels adjsummary <wave>` counts decisions with read A, with read B, or neither.
+
+All 35 Opus runs passed the checker (`adjstatus`: wave 1 22 of 22, `wave1f` 13 of 13); none
+was rerun. Each run used 98k-114k tokens and about 3 minutes. Decisions on the posts where the
+two readers differed on that field:
+
+| Field | Wave | Differed | With A | With B | Neither |
+|---|---|---:|---:|---:|---:|
+| relevant | wave 1 | 452 | 255 | 197 | 0 |
+| relevant | `wave1f` | 253 | 118 | 135 | 0 |
+| content class | wave 1 | 947 | 506 | 434 | 7 |
+| content class | `wave1f` | 562 | 253 | 309 | 0 |
+| place state | wave 1 | 1,250 | 705 | 482 | 63 |
+| place state | `wave1f` | 617 | 285 | 307 | 25 |
+| sighting candidate | wave 1 | 201 | 115 | 86 | 0 |
+| sighting candidate | `wave1f` | 150 | 79 | 71 | 0 |
+
+Sighting candidates among adjudicated posts: wave 1 A 112, B 125, adjudicated 116; `wave1f`
+A 90, B 96, adjudicated 66. Where the readers disagreed on sighting status the adjudicator
+said yes for 96 of 201 (wave 1) and 49 of 150 (`wave1f`). The adjudicator also changed a
+field both readers agreed on in a few posts (content class 23, place state 34, sighting
+status 3 across both waves); these stand, because the adjudicator gives the whole row.
+
+Position check (the shuffle key): the adjudicator sided with the first-listed read slightly
+more often on place state (wave 1 658 against 529; `wave1f` 318 against 274) and about evenly
+on content class (472 against 468; 295 against 267). Because the order was shuffled per post,
+this lean does not favour either reader.
 
 **Cost and limits measured.** A reader run uses 125k-165k Sonnet tokens and 3-4 minutes, about
 0.5% of a 5-hour usage window. The harness refuses more than 64 concurrent subagents.
 
-**Not started.** X author typing (23 batches, guide `GUIDE_author.md`, unpiloted), Opus
-adjudication, the merged label table, funnel steps 9-16 and `funnel.md`, the county baseline,
+**Not started.** X author typing (23 batches, guide `GUIDE_author.md`, unpiloted), the merged
+label table, funnel steps 9-16 and `funnel.md`, the county baseline,
 Tracks A and B, sensitivity and mechanism checks, WHISPers and GDELT state-week features, the
 kappa packets (gate 2), the paper.
 
-**Next step.** Rerun `labels agree wave1`; then Opus adjudication of the analysis-relevant
-disagreements in wave 1 batches 0-94 and `wave1f`; in parallel the work that needs no readers
-(county baseline, WHISPers and GDELT features). Labelling of Max's re-pulled X waits for the
+**Next step.** The merged label table (adjudicated row where one exists, otherwise the agreed
+reads; read A's topic kept unless the adjudicated `relevant` makes it invalid), then funnel
+steps 9-16 and `funnel.md`; alongside, the work that needs no readers (county baseline,
+WHISPers and GDELT features). Labelling of Max's re-pulled X waits for the
 data.
