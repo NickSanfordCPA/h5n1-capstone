@@ -357,6 +357,34 @@ definition; `report` writes `funnel.md`.
   posts). This was found from author counts only, with no outcome data; the protocol's
   most-active-authors check (8.6) will show its effect.
 
+**Track B, both platforms (2026-11-18; `tracks.py b`, searched forest, five seeds, 2,000
+week-block replicates).** Files in `data\journal\models\`: `track_b.csv`, `track_b_dose.csv`,
+`track_b_trend.csv`, `track_b_panel.parquet`, `track_b.log`. On the 49-state grid there are 482
+Meta and 789 X sighted state-weeks; 290 and 418 are in the test period. The O/E ratio compares
+sighted with non-sighted test state-weeks against the calibrated S3 risk.
+
+| | Meta | X |
+|---|---|---|
+| **Primary: k = 14, all sightings** | **1.21 (1.06, 1.37)**; 136 of 290 followed, 112.9 expected | **1.13 (0.97, 1.31)**; 161 of 418 followed, 142.0 expected |
+| Same, first 5 days excluded | 1.19 (0.96, 1.41) | 1.27 (1.06, 1.51) |
+| Same, first 3 days excluded | 1.26 (1.06, 1.47) | 1.18 (1.00, 1.38) |
+| Reading rule (lower bound > 1 and 5-day estimate > 1) | **met** | **not met** (interval includes 1) |
+| k = 7 | 1.36 (1.19, 1.56) | 1.12 (0.95, 1.29) |
+| k = 28 | 1.27 (1.15, 1.38) | 1.28 (1.16, 1.41) |
+| k = 14, new onsets | 1.50 (1.07, 1.98); 26 of 95 | 1.11 (0.79, 1.47); 36 of 174 |
+| k = 14, 2025-Q1 | 1.12 (0.98, 1.30) | 1.15 (0.96, 1.34) |
+| k = 14, later weeks | 1.21 (0.98, 1.46) | 1.09 (0.87, 1.33) |
+| k = 14, development period (cross-fitted) | 1.16 (0.97, 1.35) | 1.17 (1.02, 1.33) |
+| Share of outbreak state-weeks flagged, k = 14 | 19% | 23% |
+
+- Dose-response: no rising pattern on either platform. At k = 14 the ratio for 1, 2–3 and 4+
+  sighting posts is 1.27, 1.24, 1.10 on Meta and 1.11, 1.25, 1.11 on X; the trend coefficient
+  on log(1 + posts) is −0.31 (SE 0.22) on Meta and +0.12 (SE 0.30) on X.
+- The Meta interval with the first 5 days excluded reaches below 1; the rule asks only that
+  the estimate stay above 1, which it does. The two platforms' intervals overlap, so this
+  table alone does not show that Meta differs from X.
+- Not yet verified by an independent recomputation.
+
 **Cost and limits measured.** A reader run uses 125k-165k Sonnet tokens and 3-4 minutes, about
 0.5% of a 5-hour usage window. The harness refuses more than 64 concurrent subagents.
 
