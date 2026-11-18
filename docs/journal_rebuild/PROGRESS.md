@@ -237,8 +237,8 @@ These numbers have not been recomputed independently.
 |---|---|---:|---|---:|
 | wave 1, batches 0-94 (all sources, random order) | 95 | 28,500 | A 95, B 95 | 7.7% (on 27,900, before the B 84 and B 86 reads were counted) |
 | `wave1f` (unread Meta, then twitterapi X) | 66 | 19,682 | A 66, B 66 | 6.5% (1,276 posts) |
-| `wave1x` (prior-cohort X), batches 0-53 | 54 | 16,200 | A 54, B 54 | 7.4% (1,194 posts) |
-| `wave1x` batches 54-61, not yet read | 8 | 2,208 | - | - |
+| `wave1x` (prior-cohort X), batches 0-54 | 55 | 16,500 | A 55, B 55 | 7.4% (1,221 posts) |
+| `wave1x` batches 55-61, not yet read | 7 | 1,908 | - | - |
 
 `wave1f` holds 14,821 Meta posts (batches 0-49) and 4,861 twitterapi X posts (batches 49-65:
 3,814 en, 1,044 es, 3 fr). It was cut by `labels.py focus`, which keeps the wave 1 random order
@@ -250,11 +250,11 @@ class 0.947, local place 0.946, illness 0.922, exclude 0.917, place kind 0.923, 
 0.967, sighting candidate 0.947. Sighting candidates: A 1,546, B 1,552, both 1,474. The largest
 content-class confusion is domestic detection against other (206 and 131).
 
-Agreement on `wave1x` batches 0-53 (16,200 posts, end of 2026-11-18; all 108 reads launched
-pass the checker, none rerun): kappa relevant 0.887, topic 0.843, content class 0.948, local
-place 0.974, illness 0.929, exclude 0.957, place kind 0.871, place state 0.958, sighting
-candidate 0.972. Sighting candidates: A 1,221, B 1,212, both 1,185. Not yet adjudicated.
-Remaining: both reads of batches 54-61 (16 runs). `adjbatches wave1x` must wait until all 62
+Agreement on `wave1x` batches 0-54 (16,500 posts, end of 2026-11-18; all 110 reads launched
+pass the checker, none rerun): kappa relevant 0.889, topic 0.843, content class 0.947, local
+place 0.974, illness 0.929, exclude 0.958, place kind 0.871, place state 0.958, sighting
+candidate 0.973. Sighting candidates: A 1,243, B 1,234, both 1,207. Not yet adjudicated.
+Remaining: both reads of batches 55-61 (14 runs). `adjbatches wave1x` must wait until all 62
 batches have both reads, because it fixes the adjudication batches once and refuses to rebuild.
 
 `labels status <wave>` now runs the checker on every CSV (it previously only counted files).
@@ -309,7 +309,7 @@ label table, funnel steps 9-16 and `funnel.md`, the county baseline,
 Tracks A and B, sensitivity and mechanism checks, WHISPers and GDELT state-week features, the
 kappa packets (gate 2), the paper.
 
-**Next step.** Finish `wave1x`: 16 Sonnet reads (batches 54-61, both reads), then
+**Next step.** Finish `wave1x`: 14 Sonnet reads (batches 55-61, both reads), then
 `agree wave1x`, `adjbatches wave1x` and about 13 Opus adjudication runs. Then the merged label
 table (adjudicated row where one exists, otherwise the agreed reads; read A's topic kept
 unless the adjudicated `relevant` makes it invalid), funnel steps 9-16 and `funnel.md`;
