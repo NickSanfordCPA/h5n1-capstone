@@ -237,8 +237,9 @@ These numbers have not been recomputed independently.
 |---|---|---:|---|---:|
 | wave 1, batches 0-94 (all sources, random order) | 95 | 28,500 | A 95, B 95 | 7.7% (on 27,900, before the B 84 and B 86 reads were counted) |
 | `wave1f` (unread Meta, then twitterapi X) | 66 | 19,682 | A 66, B 66 | 6.5% (1,276 posts) |
-| `wave1x` (prior-cohort X), batches 0-49 | 50 | 15,000 | A 50, B 50 | 7.5% (1,122 posts) |
-| `wave1x` batches 50-61, not yet read | 12 | 3,408 | - | - |
+| `wave1x` (prior-cohort X), batches 0-51 | 52 | 15,600 | A 52, B 52 | 7.4% (1,158 posts) |
+| `wave1x` batch 52 | 1 | 300 | A only | - |
+| `wave1x` batches 53-61, not yet read | 9 | 2,508 | - | - |
 
 `wave1f` holds 14,821 Meta posts (batches 0-49) and 4,861 twitterapi X posts (batches 49-65:
 3,814 en, 1,044 es, 3 fr). It was cut by `labels.py focus`, which keeps the wave 1 random order
@@ -250,11 +251,11 @@ class 0.947, local place 0.946, illness 0.922, exclude 0.917, place kind 0.923, 
 0.967, sighting candidate 0.947. Sighting candidates: A 1,546, B 1,552, both 1,474. The largest
 content-class confusion is domestic detection against other (206 and 131).
 
-Agreement on `wave1x` batches 0-49 (15,000 posts, 2026-11-18; all 100 reads launched pass the
-checker, none rerun): kappa relevant 0.883, topic 0.841, content class 0.948, local place
-0.974, illness 0.928, exclude 0.957, place kind 0.868, place state 0.957, sighting candidate
-0.970. Sighting candidates: A 1,116, B 1,109, both 1,082. Not yet adjudicated. Remaining:
-both reads of batches 50-61 (24 runs).
+Agreement on `wave1x` batches 0-51 (15,600 posts, 2026-11-18; all 105 reads launched pass the
+checker, none rerun): kappa relevant 0.885, topic 0.843, content class 0.948, local place
+0.974, illness 0.928, exclude 0.957, place kind 0.871, place state 0.958, sighting candidate
+0.971. Sighting candidates: A 1,170, B 1,162, both 1,135. Not yet adjudicated. Remaining:
+read B of batch 52 and both reads of batches 53-61 (19 runs).
 
 Agreement on wave 1, rerun 2026-11-18 on all 28,500 twice-read posts (`labels agree wave1`):
 kappa relevant 0.909, topic 0.847, content class 0.939, local place 0.956, illness 0.919,
