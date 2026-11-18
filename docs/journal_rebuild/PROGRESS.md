@@ -237,8 +237,7 @@ These numbers have not been recomputed independently.
 |---|---|---:|---|---:|
 | wave 1, batches 0-94 (all sources, random order) | 95 | 28,500 | A 95, B 95 | 7.7% (on 27,900, before the B 84 and B 86 reads were counted) |
 | `wave1f` (unread Meta, then twitterapi X) | 66 | 19,682 | A 66, B 66 | 6.5% (1,276 posts) |
-| `wave1x` (prior-cohort X), batches 0-54 | 55 | 16,500 | A 55, B 55 | 7.4% (1,221 posts) |
-| `wave1x` batches 55-61, not yet read | 7 | 1,908 | - | - |
+| `wave1x` (prior-cohort X) | 62 | 18,408 | A 62, B 62 | 7.4% (1,368 posts) |
 
 `wave1f` holds 14,821 Meta posts (batches 0-49) and 4,861 twitterapi X posts (batches 49-65:
 3,814 en, 1,044 es, 3 fr). It was cut by `labels.py focus`, which keeps the wave 1 random order
@@ -250,12 +249,12 @@ class 0.947, local place 0.946, illness 0.922, exclude 0.917, place kind 0.923, 
 0.967, sighting candidate 0.947. Sighting candidates: A 1,546, B 1,552, both 1,474. The largest
 content-class confusion is domestic detection against other (206 and 131).
 
-Agreement on `wave1x` batches 0-54 (16,500 posts, end of 2026-11-18; all 110 reads launched
-pass the checker, none rerun): kappa relevant 0.889, topic 0.843, content class 0.947, local
-place 0.974, illness 0.929, exclude 0.958, place kind 0.871, place state 0.958, sighting
-candidate 0.973. Sighting candidates: A 1,243, B 1,234, both 1,207. Not yet adjudicated.
-Remaining: both reads of batches 55-61 (14 runs). `adjbatches wave1x` must wait until all 62
-batches have both reads, because it fixes the adjudication batches once and refuses to rebuild.
+Agreement on all of `wave1x` (18,408 posts, 2026-11-18; all 124 reads launched pass the
+checker, none rerun): kappa relevant 0.886, topic 0.840, content class 0.947, local place
+0.974, illness 0.928, exclude 0.958, place kind 0.874, place state 0.959, sighting candidate
+0.972. Sighting candidates: A 1,373, B 1,364, both 1,333. The largest content-class confusion
+is again domestic detection against other (179 and 236). 1,368 posts (7.4%) differ on an
+analysis field.
 
 `labels status <wave>` now runs the checker on every CSV (it previously only counted files).
 
@@ -301,6 +300,24 @@ more often on place state (wave 1 658 against 529; `wave1f` 318 against 274) and
 on content class (472 against 468; 295 against 267). Because the order was shuffled per post,
 this lean does not favour either reader.
 
+**`wave1x` adjudication (2026-11-18, after all 62 batches had both reads).** 1,368 posts in 14
+batches; all 14 Opus runs pass the checker (`adjstatus wave1x`: 14 of 14), none rerun, each
+88k-103k tokens and about 2 minutes. Decisions where the readers differed on that field:
+
+| Field | Differed | With A | With B | Neither |
+|---|---:|---:|---:|---:|
+| relevant | 275 | 133 | 142 | 0 |
+| content class | 559 | 298 | 260 | 1 |
+| place state | 706 | 329 | 325 | 52 |
+| sighting candidate | 71 | 35 | 36 | 0 |
+
+Sighting candidates among adjudicated posts: A 46, B 37, adjudicated 33. Fields both readers
+agreed on but the adjudicator changed: content class 3, place state 40, sighting status 1;
+these stand. The position check on the shuffle key was not rerun for `wave1x`.
+
+With this, every one of the 66,590 reader-set posts has two valid reads, and all 4,826
+posts that differed on an analysis field (2,182 + 1,276 + 1,368) are adjudicated.
+
 **Cost and limits measured.** A reader run uses 125k-165k Sonnet tokens and 3-4 minutes, about
 0.5% of a 5-hour usage window. The harness refuses more than 64 concurrent subagents.
 
@@ -309,9 +326,8 @@ label table, funnel steps 9-16 and `funnel.md`, the county baseline,
 Tracks A and B, sensitivity and mechanism checks, WHISPers and GDELT state-week features, the
 kappa packets (gate 2), the paper.
 
-**Next step.** Finish `wave1x`: 14 Sonnet reads (batches 55-61, both reads), then
-`agree wave1x`, `adjbatches wave1x` and about 13 Opus adjudication runs. Then the merged label
-table (adjudicated row where one exists, otherwise the agreed reads; read A's topic kept
+**Next step.** Post labelling and adjudication are complete for all three waves. Next: the
+merged label table (adjudicated row where one exists, otherwise the agreed reads; read A's topic kept
 unless the adjudicated `relevant` makes it invalid), funnel steps 9-16 and `funnel.md`;
 alongside, the work that needs no readers (county baseline, WHISPers and GDELT features). Labelling of Max's re-pulled X waits for the
 data.
