@@ -385,6 +385,26 @@ sighted with non-sighted test state-weeks against the calibrated S3 risk.
   table alone does not show that Meta differs from X.
 - Not yet verified by an independent recomputation.
 
+**X author types and the news-like tag (2026-11-18).** `authors.py` gained reader
+instructions, a checker, `agree`, `adjbatches` and `merge`. Pilot: both reads of batch 0 (500
+accounts) agreed on 498 (kappa 0.991); both readers' scratch scripts only wrote out lists of
+the accounts they had judged, so the guide was used unchanged. Then the other 44 Sonnet runs:
+23 of 23 batches valid on both reads, none rerun. On 11,460 accounts agreement is 0.992,
+kappa 0.982; the 91 that differed went to one Opus run (checker-valid; 51 organisation, 40
+individual). `authors merge` writes `journal.author_type` and `journal.post_tag`.
+
+| | Meta | X |
+|---|---:|---:|
+| Authors: organisation | 8,080 (Pages) | 4,125 (189 from `verifiedType`) |
+| Authors: individual | 845 (profiles) | 7,524 |
+| Reader-set posts by an organisation (all news-like) | 24,378 | 15,175 |
+| Posts by an individual, news-like by content class | 283 | 9,845 |
+| Posts by an individual, personal | 1,271 | 15,638 |
+
+Meta has few personal posts (1,271 of 25,932 in the reader set), so the personal cells of the
+mechanism checks will be small on Meta. The author guide was not piloted beyond batch 0 and
+has no human check yet.
+
 **Cost and limits measured.** A reader run uses 125k-165k Sonnet tokens and 3-4 minutes, about
 0.5% of a 5-hour usage window. The harness refuses more than 64 concurrent subagents.
 

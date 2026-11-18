@@ -181,12 +181,76 @@ def adjbatches(seed: int = 20261118, size: int = 250) -> None:
     print(f"{len(m):,} accounts in {m['batch'].nunique()} adjudication batches under {d}")
 
 
+def merge() -> None:
+    """journal.author_type (one row per reader-set author on either platform) and
+    journal.post_tag (author type and the news-like / personal tag for every reader-set post).
+
+    X: verifiedType Business/Government -> organisation; otherwise the two reads where they
+    agree, the Opus adjudication where they differ. Meta: Page -> organisation, anything else
+    -> individual. news_like = organisation author OR class domestic_detection / wildlife_report
+    (protocol 6.3)."""
+    from sqlalchemy import text
+
+    from h5n1.journal.localdb import assert_local, local_engine
+
+    a, b = _reads()
+    need = pd.read_csv(LAB / "manifest.csv", dtype=str)
+    adj = pd.concat([pd.read_csv(f, dtype=str, keep_default_na=False)
+                     for f in sorted((LAB / "adj").glob("labels_*.csv"))]).set_index("id")["author_type"]
+    if len(a) != len(need) or set(adj.index) != set(a.index[a != b]):
+        raise SystemExit("reads or adjudication are incomplete")
+    lab = a.copy()
+    lab.loc[adj.index] = adj
+    x = pd.DataFrame({"author_id": lab.index.str[1:], "author_type": lab.to_numpy(),
+                      "source": np.where(lab.index.isin(adj.index), "adjudicated", "reads")})
+    xa = x_authors()
+    meta_x = xa.loc[xa["from_metadata"], ["author_id"]].assign(author_type="organisation", source="verified_type")
+    x = pd.concat([x, meta_x]).assign(platform="x")
+    if set(x["author_id"]) != set(xa["author_id"]) or x["author_id"].duplicated().any():
+        raise SystemExit("X author types are not exactly one row per reader-set author")
+
+    p = pd.read_parquet(OUT / "funnel.parquet", columns=["platform", "post_id", "author_id",
+                                                         "owner_type", "reader_set"])
+    p = p[p["reader_set"]]
+    m = p[p["platform"] == "meta"]
+    print("Meta owner_type in the reader set:", m["owner_type"].value_counts(dropna=False).to_dict())
+    mt = (m.assign(org=m["owner_type"].str.lower().eq("page")).groupby("author_id")["org"].max()
+          .map({True: "organisation", False: "individual"}).rename("author_type").reset_index()
+          .assign(source="owner_type", platform="meta"))
+    authors = pd.concat([x, mt], ignore_index=True)[["platform", "author_id", "author_type", "source"]]
+
+    fun = pd.read_parquet(OUT / "label_funnel.parquet", columns=["platform", "post_id", "author_id",
+                                                                 "content_class"])
+    tag = fun.merge(authors[["platform", "author_id", "author_type"]], on=["platform", "author_id"],
+                    how="left", validate="m:1")
+    if tag["author_type"].isna().any():
+        raise SystemExit(f"{int(tag['author_type'].isna().sum())} reader-set posts have no author type")
+    tag["news_like"] = (tag["author_type"] == "organisation") | tag["content_class"].isin(
+        ["domestic_detection", "wildlife_report"])
+    tag = tag[["platform", "post_id", "author_type", "news_like"]]
+    authors.to_parquet(LAB / "author_type.parquet", index=False)
+    tag.to_parquet(OUT / "post_tag.parquet", index=False)
+    eng = local_engine()
+    assert_local(eng)
+    with eng.begin() as cn:
+        for name, df, pk in (("author_type", authors, "platform, author_id"),
+                             ("post_tag", tag, "platform, post_id")):
+            cn.execute(text(f"DROP TABLE IF EXISTS journal.{name}"))
+            df.to_sql(name, cn, schema="journal", index=False, chunksize=5000, method="multi")
+            cn.execute(text(f"ALTER TABLE journal.{name} ADD PRIMARY KEY ({pk})"))
+    print(authors.groupby(["platform", "source", "author_type"]).size().to_string())
+    print(pd.crosstab([tag["platform"], tag["author_type"]], tag["news_like"]).to_string())
+
+
 if __name__ == "__main__":
+    import numpy as np
+
     ap = argparse.ArgumentParser()
-    ap.add_argument("step", choices=["batches", "instructions", "status", "check", "agree", "adjbatches"])
+    ap.add_argument("step", choices=["batches", "instructions", "status", "check", "agree", "adjbatches",
+                                     "merge"])
     ap.add_argument("args", nargs="*")
     a = ap.parse_args()
     if a.step == "check":
         raise SystemExit(check(*a.args))
     {"batches": batches, "instructions": instructions, "status": status, "agree": agree,
-     "adjbatches": adjbatches}[a.step]()
+     "adjbatches": adjbatches, "merge": merge}[a.step]()
