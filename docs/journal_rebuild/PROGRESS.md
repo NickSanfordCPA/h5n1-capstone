@@ -50,7 +50,8 @@ Protocol commit hash: `ef852d252226fd905b1a40a798dc6cc40956cca1` (committed 2026
 | `textgeo.py` | Text-only geocoder |
 | `funnel.py` | Steps 3–8, `journal.post`, funnel counts |
 | `whispers.py` | WHISPers download and load, with `known_date_lb` |
-| `labels.py` | Reader batches, CSV checker, agreement between reads |
+| `labels.py` | Reader batches, CSV checker, agreement between reads, adjudication batches |
+| `label_funnel.py` | Merged label table, funnel steps 9–16 (`journal.post_label`, `journal.post_funnel`), `funnel.md` |
 | `xlmr_score.py` | Standalone XLM-R scorer |
 
 Documents: `GUIDE_reader.md` (version J1), `PROTOCOL.md` (gate 1 draft).
@@ -318,16 +319,52 @@ these stand. The position check on the shuffle key was not rerun for `wave1x`.
 With this, every one of the 66,590 reader-set posts has two valid reads, and all 4,826
 posts that differed on an analysis field (2,182 + 1,276 + 1,368) are adjudicated.
 
+**Merged labels and funnel steps 9-16 (2026-11-18).** `label_funnel.py merge` writes one label
+row per reader-set post (`data\journal\labels\merged.parquet`, `journal.post_label`): the
+adjudicated row for the 4,826 adjudicated posts (Meta 1,707, X 3,119), read A's row for the
+other 61,764. Read A's topic is kept on adjudicated rows unless the adjudicated `relevant`
+makes it invalid. The step aborts unless the labels are exactly one row per reader-set post,
+the adjudicated ids are exactly the posts whose reads differ, and every row passes the
+checker's consistency rules. `label_funnel.py build` applies steps 9-16
+(`journal.post_funnel`) and aborts unless steps 9-14 reproduce the sighting-candidate
+definition; `report` writes `funnel.md`.
+
+| | Meta | X |
+|---|---:|---:|
+| Reader set | 25,932 | 40,658 |
+| 9 Not about avian influenza (reader) | 3,526 | 2,794 |
+| 10 Not about one US state (reader) | 3,064 | 4,560 |
+| **Sentiment set (Track A)** | **19,342** | **33,304** |
+| 11 No sick or dead animals at a local place | 14,791 | 23,171 |
+| 12 Announced domestic detection | 2,229 | 4,065 |
+| 13 Other content | 511 | 612 |
+| 14 Retrospective / Not HPAI / Not credible / Outside the US | 76 / 24 / 0 / 0 | 2,216 / 4 / 4 / 0 |
+| 15 Outside the contiguous states | 41 | 208 |
+| **Sighting posts** | **1,670** | **3,024** |
+| 16 Same state-week as an earlier sighting | 1,165 | 2,197 |
+| **Sightings (Track B)** | **505** | **827** |
+
+- Sighted state-weeks by period: Meta 216 (2022-24) and 289 (2025+); X 413 and 414.
+- State moves: the reader's state differs from the geocoder's for 117 Meta and 144 X posts in
+  the sentiment set (0.6% and 0.4%).
+- **X sightings are concentrated in three relay accounts.** Of 3,024 X sighting posts, 1,279
+  are from `account A`, 400 from `account B` and 209 from `account C` (62% together); they
+  supply the first post in 506 of the 827 sighted state-weeks. `account A` posts one line per
+  row of the APHIS wild-bird table; 2,127 more of its posts were removed at step 14 as
+  retrospective because the row's date was more than about 30 days old. So much of the X
+  sighting series restates the wild-bird detections that the baseline already uses, at their
+  publication date. Meta has no such account (the largest author has 15 of 1,670 sighting
+  posts). This was found from author counts only, with no outcome data; the protocol's
+  most-active-authors check (8.6) will show its effect.
+
 **Cost and limits measured.** A reader run uses 125k-165k Sonnet tokens and 3-4 minutes, about
 0.5% of a 5-hour usage window. The harness refuses more than 64 concurrent subagents.
 
-**Not started.** X author typing (23 batches, guide `GUIDE_author.md`, unpiloted), the merged
-label table, funnel steps 9-16 and `funnel.md`, the county baseline,
+**Not started.** X author typing (23 batches, guide `GUIDE_author.md`, unpiloted), the county baseline,
 Tracks A and B, sensitivity and mechanism checks, WHISPers and GDELT state-week features, the
 kappa packets (gate 2), the paper.
 
-**Next step.** Post labelling and adjudication are complete for all three waves. Next: the
-merged label table (adjudicated row where one exists, otherwise the agreed reads; read A's topic kept
-unless the adjudicated `relevant` makes it invalid), funnel steps 9-16 and `funnel.md`;
-alongside, the work that needs no readers (county baseline, WHISPers and GDELT features). Labelling of Max's re-pulled X waits for the
+**Next step.** Post labelling, adjudication, the merged label table and funnel steps 9-16 are
+done. Next: the work that needs no readers (WHISPers and GDELT state-week features, county
+baseline, Track A features), and X author typing (needs a reader count from Nick). Labelling of Max's re-pulled X waits for the
 data.
