@@ -4,8 +4,10 @@
     uv run python -m h5n1.journal.label_funnel build    # steps 9-16 -> journal.post_funnel
     uv run python -m h5n1.journal.label_funnel report   # docs/journal_rebuild/funnel.md
 
-merge: one row per reader-set post from the three label waves (wave1 batches 0-94, wave1f,
-wave1x; wave1 batches 95+ are superseded).
+merge: one row per reader-set post. Since the X re-pull (2026-11-19) the rows come from two
+places: labels carried over from the table built on the earlier corpus (labels/carried.parquet,
+written by `labels.py carry`; those rows were merged from wave1 batches 0-94, wave1f and wave1x
+by this same rule), and wave2, the posts read after the re-pull.
 
   * Where the two reads differed on an analysis field the post was adjudicated, and the
     adjudicator's whole row is used. Its topic is not: protocol 6.1 keeps read A's topic.
@@ -36,7 +38,8 @@ from h5n1.journal.labels import FIELDS, LAB, STATES, derive
 from h5n1.journal.localdb import REPO, assert_local, local_engine
 from h5n1.journal.posts import OUT
 
-WAVES = {"wave1": 95, "wave1f": None, "wave1x": None}   # wave -> first superseded batch
+WAVES = {"wave2": None}   # wave -> first superseded batch. The earlier waves arrive carried.
+CARRIED = LAB / "carried.parquet"
 MERGED = LAB / "merged.parquet"
 FUNNEL = OUT / "label_funnel.parquet"
 DOC = REPO / "docs" / "journal_rebuild" / "funnel.md"
@@ -94,7 +97,10 @@ def merge() -> None:
         out = out.reset_index().merge(m[["id", "platform", "post_id"]], on="id", validate="1:1")
         parts.append(out)
         print(f"{wave}: {len(out):,} posts, {len(adj):,} adjudicated")
-    lab = pd.concat(parts, ignore_index=True)
+    keep = ["platform", "post_id", "wave", "label_source", "topic_reads_agree"] + FIELDS[1:]
+    car = pd.read_parquet(CARRIED).assign(post_id=lambda d: d["post_id"].astype(str))
+    print(f"carried: {len(car):,} posts ({car['carry'].value_counts().to_dict()})")
+    lab = pd.concat([car[keep]] + [q[keep] for q in parts], ignore_index=True)
 
     rs = pd.read_parquet(OUT / "funnel.parquet", columns=["platform", "post_id", "reader_set"])
     rs = rs[rs["reader_set"]]
@@ -105,7 +111,7 @@ def merge() -> None:
     bad |= (lab["illness"] == "no") & (lab["exclude"] != "")
     if bad.any():
         raise SystemExit(f"{int(bad.sum())} merged rows break the checker's consistency rules")
-    lab = lab[["platform", "post_id", "wave", "label_source", "topic_reads_agree"] + FIELDS[1:]]
+    lab = lab[keep]
     lab.to_parquet(MERGED, index=False)
     eng = local_engine()
     assert_local(eng)
@@ -116,7 +122,8 @@ def merge() -> None:
         cn.execute(text(
             "COMMENT ON TABLE journal.post_label IS 'Journal rebuild: one reader label row per "
             "reader-set post. Adjudicated row where the two reads differed on an analysis field, "
-            "otherwise read A (reads agree on those fields). Built by label_funnel.py merge.'"))
+            "otherwise read A (reads agree on those fields). After the X re-pull: carried labels "
+            "plus wave2. Built by label_funnel.py merge.'"))
     print(f"{len(lab):,} posts -> {MERGED} and journal.post_label")
     print(lab.groupby(["platform", "label_source"]).size().unstack().to_string())
 
@@ -320,11 +327,20 @@ def report() -> None:
     w("A sighting's class is the class of the first sighting post in its state-week. Distinct "
       "named places are counted from the readers' free-text `place_name` after lower-casing and "
       "removing punctuation, so two spellings of one place count twice.\n")
-    w("## Not yet in this document\n")
-    w("- The news-like and personal tags need the X author types, which are not labelled yet.\n"
-      "- X posts from the prior-cohort collector carry labels keyed by post id; when the re-pull "
-      "of that period arrives, a label is reused only where the same id returns with the same "
-      "text.\n")
+    w("## Labels after the X re-pull\n")
+    w("The English X posts of 2022-06 to 2024-12 were first collected by an earlier scraper and "
+      "were replaced on 2026-11-18 by a pull with the same collector and queries as the later "
+      "period. Labels are keyed by post id. A post keeps its label when it returns with the "
+      "same wording (the earlier export had lost commas and line breaks, so wording is compared "
+      "on letters and digits only, without links); every other reader-set post was read twice "
+      "after the re-pull.\n")
+    w("| Label origin | Meta | X |")
+    w("|---|---:|---:|")
+    wv = d[["platform", "post_id"]].merge(pd.read_parquet(MERGED, columns=["platform", "post_id", "wave"]),
+                                          on=["platform", "post_id"], validate="1:1")["wave"]
+    w(_row("Read before the re-pull, label carried", n((wv != "wave2").to_numpy())))
+    w(_row("Read after the re-pull", n((wv == "wave2").to_numpy())))
+    w("")
     DOC.write_text("\n".join(L), encoding="utf-8")
     print(f"wrote {DOC}")
 

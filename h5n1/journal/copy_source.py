@@ -4,6 +4,7 @@ exact row counts.
 
     uv run python -m h5n1.journal.copy_source            # copy what is missing, then verify
     uv run python -m h5n1.journal.copy_source --verify   # counts only
+    uv run python -m h5n1.journal.copy_source --only x_raw,x_raw_en_hist   # just these tables
 
 Resumable: a table that already exists locally with the same row count is skipped; one
 that exists with a different count is dropped (locally) and copied again.
@@ -34,6 +35,7 @@ TABLES = [
     "fact_social_sentiment", "fact_x_post",   # empty in the shared DB, but 011 joins them
     "fact_gdelt_article", "fact_gdelt_location", "fact_gdelt_denominator", "fact_gdelt_gcam",
     "x_raw", "x_csv_raw",
+    "x_raw_en_hist",   # Max's 2022-06..2024-12 English re-pull (2026-11-18); replaces x_csv_raw
     "schema_migrations", "model_build_log",
 ]
 
@@ -66,10 +68,15 @@ def copy_table(table: str) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--verify", action="store_true")
+    ap.add_argument("--only", default="", help="comma-separated tables; the count file is "
+                    "left alone")
     args = ap.parse_args()
+    only = [t for t in args.only.split(",") if t]
+    if set(only) - set(TABLES):
+        raise SystemExit(f"not in TABLES: {sorted(set(only) - set(TABLES))}")
     src, dst = source_engine(), local_engine()
     rows = []
-    for t in TABLES:
+    for t in only or TABLES:
         # A table the rebuild has since replaced keeps its untouched copy as <t>_shared
         # (wild_birds.py does this). Compare against that copy and never overwrite the
         # rebuilt table: re-copying it once silently undid the wild-bird re-dating.
@@ -103,7 +110,8 @@ def main() -> int:
         rows.append({"table": t, "source_rows": n_src, "local_rows": n_dst, "match": ok})
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     df = pd.DataFrame(rows)
-    df.to_csv(DATA_DIR / "source_row_counts.csv", index=False)
+    if not only:
+        df.to_csv(DATA_DIR / "source_row_counts.csv", index=False)
     return 0 if df.match.all() else 1
 
 

@@ -144,6 +144,18 @@ The paper describes itself as exploratory.
   report whether the collector break remains. Consider presenting X without the relay
   accounts as the main X estimate, or say plainly in the abstract that the X result depends
   on them. Until the rerun, no X number should be quoted outside the team.
+- Update, 2026-11-19: partly resolved. The X arm was rerun on the re-pulled data. The
+  collector break is gone: one collector and the same two query groups on both sides of
+  January 1, 2025, with continuous volume and post mix across the boundary. Two points
+  remain. (a) The re-pulled 2022-2024 period is less complete than 2025-2026 (no rows for
+  5.4% of query-days against 0.5%; 66 busy days cut short against 4); the list is in
+  `docs/journal_rebuild/x_repull_gaps.csv`. (b) X still depends on relay accounts: 3
+  accounts wrote 48% of X sighting posts, and without the top 1% of authors the ratio is
+  1.14 (95% CI 0.95 to 1.36) from 120 state-weeks. The account that posted the APHIS table
+  row by row is almost absent from the new pull (25 sighting posts, from 1,279), so that
+  particular objection no longer applies. The X test-period Track B and mechanism numbers
+  did not change, because the 2025-2026 posts are the same posts; X Track A is now −0.010
+  (95% CI −0.018 to 0.001).
 
 ## Minor comments
 

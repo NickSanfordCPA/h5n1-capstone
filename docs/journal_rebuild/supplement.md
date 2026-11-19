@@ -1,7 +1,7 @@
 # Capstone supplement: language and emoji comparisons
 
 *Written 2026-11-18. For the capstone report only; none of this is in the journal manuscript.
-All X numbers are provisional until Max's re-pull is analysed.*
+X numbers updated 2026-11-19 after Max's re-pull of the 2022-2024 English X posts.*
 
 ## What this analysis does
 
@@ -47,21 +47,21 @@ X.
 
 | | Facebook, English | Facebook, Spanish | X, English | X, Spanish |
 |---|---:|---:|---:|---:|
-| Sentiment-set posts | 15,835 | 3,507 | 31,788 | 1,516 |
-| Sighting posts | 1,503 | 167 | 2,960 | 64 |
+| Sentiment-set posts | 15,835 | 3,507 | 13,105 | 1,513 |
+| Sighting posts | 1,503 | 167 | 1,196 | 64 |
 | Sighted state-weeks, test period | 282 | 40 | 418 | 7 |
 
 Every X state-week that has a sighting has an English one, so the English-only X result for
 Track B is the pooled result.
 
-**Track A is null in both languages.** Change in PR-AUC from adding post features, 14 days,
+**Track A shows no gain in either language.** Change in PR-AUC from adding post features, 14 days,
 new-onset state-weeks (95% CI):
 
 | Posts used | State-weeks (events) | Facebook | State-weeks (events) | X |
 |---|---|---|---|---|
-| Both languages (journal primary) | 490 (86) | −0.000 (−0.013 to 0.011) | 585 (96) | −0.002 (−0.010 to 0.006) |
-| English only | 478 (86) | 0.002 (−0.010 to 0.015) | 578 (94) | −0.003 (−0.011 to 0.009) |
-| Spanish only | 66 (11) | −0.006 (−0.023 to 0.011) | 22 (5) | 0.108 (−0.029 to 0.375) |
+| Both languages (journal primary) | 490 (86) | −0.000 (−0.013 to 0.011) | 585 (96) | −0.010 (−0.018 to 0.001) |
+| English only | 478 (86) | 0.002 (−0.010 to 0.015) | 578 (94) | 0.005 (−0.005 to 0.015) |
+| Spanish only | 66 (11) | −0.006 (−0.023 to 0.011) | 22 (5) | 0.129 (−0.067 to 0.477) |
 
 The Spanish-only X cell has 5 events and cannot be read. With post windows ending 5 days
 early, every cell's interval again includes zero.
@@ -87,15 +87,15 @@ state-weeks, 14 days (95% CI):
 
 ## Findings: emoji
 
-**How common emoji are.** Of 52,646 sentiment-set posts, 7,386 (14%) contain an emoji. They
+**How common emoji are.** Of 33,960 sentiment-set posts, 5,850 (17%) contain an emoji. They
 are far more common in Spanish posts.
 
 | | Posts | With an emoji | Share |
 |---|---:|---:|---:|
 | Facebook, English | 15,835 | 1,552 | 10% |
 | Facebook, Spanish | 3,507 | 1,634 | 47% |
-| X, English | 31,788 | 3,608 | 11% |
-| X, Spanish | 1,516 | 592 | 39% |
+| X, English | 13,105 | 2,072 | 16% |
+| X, Spanish | 1,513 | 592 | 39% |
 
 **Removing emoji barely moves the score.** Among posts with an emoji, the mean sentiment
 score (positive minus negative probability, from −1 to 1) changed by 0.01 or less in every
@@ -106,12 +106,12 @@ label changed for 4% to 7% of posts.
 |---|---:|---:|---:|---:|
 | Facebook, English | −0.424 | −0.422 | 0.042 | 5.9% |
 | Facebook, Spanish | −0.593 | −0.595 | 0.037 | 5.3% |
-| X, English | −0.492 | −0.484 | 0.050 | 6.5% |
+| X, English | −0.493 | −0.487 | 0.047 | 5.6% |
 | X, Spanish | −0.611 | −0.615 | 0.035 | 4.2% |
 
 Label changes ran in both directions and nearly cancelled. On Facebook, 72 posts moved from
-negative to neutral when emoji were removed and 86 moved from neutral to negative; on X, 126
-and 100. Moves between negative and positive were rare (4 on Facebook, 17 on X). In these
+negative to neutral when emoji were removed and 86 moved from neutral to negative; on X, 67
+and 62. Moves between negative and positive were rare (4 on Facebook, 5 on X). In these
 posts, which are mostly relayed news, emoji carry little of the tone the model reads. (Which
 emoji are used was not tabulated.)
 
@@ -119,11 +119,11 @@ emoji are used was not tabulated.)
 
 | Sentiment scores | Facebook | X |
 |---|---|---|
-| As posted (journal primary) | −0.000 (−0.013 to 0.011) | −0.002 (−0.010 to 0.006) |
-| Emoji removed | 0.000 (−0.013 to 0.011) | −0.002 (−0.010 to 0.006) |
+| As posted (journal primary) | −0.000 (−0.013 to 0.011) | −0.010 (−0.018 to 0.001) |
+| Emoji removed | 0.000 (−0.013 to 0.011) | −0.009 (−0.016 to 0.003) |
 
 The result with windows ending 5 days early is equally unchanged (Facebook −0.004 as posted,
-−0.005 with emoji removed; X 0.002 and 0.001; every interval includes zero).
+−0.005 with emoji removed; X −0.004 and −0.005; every interval includes zero).
 
 ## What this means for the capstone
 

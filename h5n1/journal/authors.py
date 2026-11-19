@@ -1,6 +1,7 @@
 """Author type (organisation / individual), protocol section 6.3.
 
     uv run python -m h5n1.journal.authors batches     # X accounts that need a reader
+    uv run python -m h5n1.journal.authors batches2    # after the X re-pull: accounts not yet typed
     uv run python -m h5n1.journal.authors status
 
 Meta: from post_owner.type, no reader (Page -> organisation, profile -> individual).
@@ -23,6 +24,7 @@ from h5n1.journal.localdb import DATA_DIR
 from h5n1.journal.posts import OUT
 
 LAB = DATA_DIR / "labels" / "authors"
+ROUND2 = LAB / "round2"     # accounts that entered the reader set with the X re-pull (2026-11-19)
 BATCH = 500
 ORG_VERIFIED = {"Business", "Government"}
 
@@ -58,6 +60,34 @@ def batches(seed: int = 20261117) -> None:
     print(f"X reader-set authors {len(a):,}; organisation from verifiedType "
           f"{int(a['from_metadata'].sum()):,}; to readers {len(need):,} in "
           f"{need['batch'].nunique()} batches of {BATCH}")
+
+
+def batches2() -> None:
+    """After the X re-pull: the reader-set accounts that have no type yet, as one more round
+    with the same layout under authors/round2. Accounts typed in round 1 keep their type (it
+    is keyed by account id). Refuses to overwrite."""
+    if (ROUND2 / "manifest.csv").exists():
+        raise SystemExit(f"{ROUND2} already has a manifest; batches are fixed and are not rebuilt")
+    done = set(pd.read_csv(LAB / "manifest.csv", dtype=str)["author_id"])
+    a = x_authors()
+    need = a[~a["from_metadata"] & ~a["author_id"].isin(done)]
+    need = need.sample(frac=1, random_state=20261119).reset_index(drop=True)
+    need["batch"] = need.index // BATCH
+    for sub in ("A", "B"):
+        (ROUND2 / sub).mkdir(parents=True, exist_ok=True)
+    for n, g in need.groupby("batch"):
+        with open(ROUND2 / f"batch_{n}.jsonl", "w", encoding="utf-8") as f:
+            for r in g.itertuples(index=False):
+                bio = re.sub(r"\s+", " ", r.bio or "")[:300]
+                f.write(json.dumps({"id": f"x{r.author_id}", "name": (r.name or "")[:80],
+                                    "handle": r.handle or "", "bio": bio},
+                                   ensure_ascii=False) + "\n")
+    need[["batch", "author_id"]].to_csv(ROUND2 / "manifest.csv", index=False)
+    (ROUND2 / "READER_INSTRUCTIONS.md").write_text(INSTRUCTIONS.format(d=str(ROUND2)),
+                                                   encoding="utf-8")
+    print(f"X reader-set authors {len(a):,}; typed in round 1 "
+          f"{int(a['author_id'].isin(done).sum()):,}; to readers {len(need):,} in "
+          f"{need['batch'].nunique()} batch(es) under {ROUND2}")
 
 
 TYPES = {"organisation", "individual"}
@@ -116,7 +146,17 @@ def _valid(folder, batch_dir) -> tuple[list[int], list[int]]:
     return [i for i in have if i not in bad], bad
 
 
+def _rounds() -> list:
+    return [LAB] + ([ROUND2] if (ROUND2 / "manifest.csv").exists() else [])
+
+
 def status() -> None:
+    for lab in _rounds():
+        print(lab)
+        _status(lab)
+
+
+def _status(LAB) -> None:
     n = len(list(LAB.glob("batch_*.jsonl")))
     for sub in ("A", "B"):
         ok, bad = _valid(LAB / sub, LAB)
@@ -128,9 +168,11 @@ def status() -> None:
         print(f"adjudication: {len(ok)} of {na} valid; failing: {bad}")
 
 
-def _reads() -> tuple[pd.Series, pd.Series]:
+def _reads(labs=None) -> tuple[pd.Series, pd.Series]:
+    labs = labs or _rounds()
     rd = lambda sub: pd.concat([pd.read_csv(f, dtype=str, keep_default_na=False)  # noqa: E731
-                                for f in sorted((LAB / sub).glob("labels_*.csv"))]).set_index("id")["author_type"]
+                                for lab in labs
+                                for f in sorted((lab / sub).glob("labels_*.csv"))]).set_index("id")["author_type"]
     a, b = rd("A"), rd("B")
     ids = a.index.intersection(b.index)
     return a.loc[ids], b.loc[ids]
@@ -145,16 +187,17 @@ def agree() -> None:
     print(pd.crosstab(a.rename("read A"), b.rename("read B")).to_string())
 
 
-def adjbatches(seed: int = 20261118, size: int = 250) -> None:
-    """Fix the adjudication batches: every account the two reads label differently, with both
-    answers in a per-account shuffled order. Refuses to overwrite; run only when both reads
-    are complete."""
+def adjbatches(seed: int = 20261118, size: int = 250, LAB=None) -> None:
+    """Fix the adjudication batches of the latest round: every account the two reads label
+    differently, with both answers in a per-account shuffled order. Refuses to overwrite; run
+    only when both reads are complete."""
     import numpy as np
 
+    LAB = LAB or _rounds()[-1]
     d = LAB / "adj"
     if (d / "manifest.csv").exists():
         raise SystemExit(f"{d} already has a manifest; batches are fixed and are not rebuilt")
-    a, b = _reads()
+    a, b = _reads([LAB])
     need = pd.read_csv(LAB / "manifest.csv", dtype=str)
     if len(a) != len(need):
         raise SystemExit(f"only {len(a):,} of {len(need):,} accounts have both reads")
@@ -194,9 +237,10 @@ def merge() -> None:
     from h5n1.journal.localdb import assert_local, local_engine
 
     a, b = _reads()
-    need = pd.read_csv(LAB / "manifest.csv", dtype=str)
+    need = pd.concat([pd.read_csv(lab / "manifest.csv", dtype=str) for lab in _rounds()])
     adj = pd.concat([pd.read_csv(f, dtype=str, keep_default_na=False)
-                     for f in sorted((LAB / "adj").glob("labels_*.csv"))]).set_index("id")["author_type"]
+                     for lab in _rounds()
+                     for f in sorted((lab / "adj").glob("labels_*.csv"))]).set_index("id")["author_type"]
     if len(a) != len(need) or set(adj.index) != set(a.index[a != b]):
         raise SystemExit("reads or adjudication are incomplete")
     lab = a.copy()
@@ -206,6 +250,8 @@ def merge() -> None:
     xa = x_authors()
     meta_x = xa.loc[xa["from_metadata"], ["author_id"]].assign(author_type="organisation", source="verified_type")
     x = pd.concat([x, meta_x]).assign(platform="x")
+    # accounts typed in round 1 that the X re-pull took out of the reader set are not used
+    x = x[x["author_id"].isin(set(xa["author_id"]))]
     if set(x["author_id"]) != set(xa["author_id"]) or x["author_id"].duplicated().any():
         raise SystemExit("X author types are not exactly one row per reader-set author")
 
@@ -246,11 +292,11 @@ if __name__ == "__main__":
     import numpy as np
 
     ap = argparse.ArgumentParser()
-    ap.add_argument("step", choices=["batches", "instructions", "status", "check", "agree", "adjbatches",
+    ap.add_argument("step", choices=["batches", "batches2", "instructions", "status", "check", "agree", "adjbatches",
                                      "merge"])
     ap.add_argument("args", nargs="*")
     a = ap.parse_args()
     if a.step == "check":
         raise SystemExit(check(*a.args))
-    {"batches": batches, "instructions": instructions, "status": status, "agree": agree,
+    {"batches": batches, "batches2": batches2, "instructions": instructions, "status": status, "agree": agree,
      "adjbatches": adjbatches, "merge": merge}[a.step]()

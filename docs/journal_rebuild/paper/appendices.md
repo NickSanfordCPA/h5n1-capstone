@@ -2,8 +2,8 @@
 
 Draft 1, 2026-11-18, for `manuscript.md`. Appendices 1 to 4 are separate files (the
 checklists, the protocol with its departures, the post-processing counts, and the labelling
-guides). All X numbers are provisional until the X data are re-collected and the analysis is
-rerun.
+guides). X numbers were updated on 2026-11-19 after the English X posts of 2022-2024 were
+re-collected.
 
 ## Multimedia Appendix 5. Baseline details
 
@@ -67,8 +67,8 @@ from 0.088 to 0.095, so the search determined the setting weakly.
 intervals include zero. The combined county model is not worse than the state baseline. The
 comparison does not bear on whether posts add to the forecast; Track A answers that at state
 level, and on the state-weeks used in Track A the state model with post features did not
-differ from the combined county model (Facebook 0.033, 95% CI −0.050 to 0.121; X 0.034, 95%
-CI −0.035 to 0.096).
+differ from the combined county model (Facebook 0.033, 95% CI −0.050 to 0.121; X 0.051, 95%
+CI −0.024 to 0.136).
 
 ## Multimedia Appendix 6. Comparison with an earlier version of the Facebook data set
 
@@ -114,22 +114,24 @@ Values in parentheses are 95% CIs.
 
 | Analysis | Track A, Facebook | Track A, X | Track B, Facebook | Track B, X |
 |---|---|---|---|---|
-| Primary analysis | −0.000 (−0.013 to 0.011) | −0.002 (−0.010 to 0.006) | 1.21 (1.06 to 1.37); 1.19 | 1.13 (0.97 to 1.31); 1.27 |
-| Wild-bird features dated by collection | 0.001 (−0.011 to 0.013) | 0.002 (−0.004 to 0.007) | 1.18 (1.03 to 1.33); 1.17 | 1.11 (0.95 to 1.27); 1.25 |
-| Alternative forest (300 trees, depth 6) | 0.006 (−0.009 to 0.022) | 0.001 (−0.006 to 0.012) | 1.21 (1.06 to 1.37); 1.19 | 1.14 (0.99 to 1.31); 1.29 |
-| WHISPers mortality counts added to the baseline | 0.005 (−0.014 to 0.022) | 0.003 (−0.004 to 0.008) | 1.21 (1.06 to 1.37); 1.18 | 1.13 (0.97 to 1.30); 1.27 |
-| Posts containing a poultry word removed | −0.013 (−0.026 to 0.006) | −0.002 (−0.009 to 0.004) | 1.17 (1.01 to 1.35); 1.15 | 1.14 (0.96 to 1.32); 1.32 |
-| Most active 1% of authors removed | −0.003 (−0.015 to 0.008) | 0.005 (−0.008 to 0.015) | 1.20 (1.04 to 1.35); 1.21 | 1.10 (0.88 to 1.35); 1.14 |
-| X posts located by author profile | not applicable | −0.000 (−0.006 to 0.004) | not applicable | 1.13 (0.98 to 1.30); 1.30 |
-| 30-day onset and 30-day horizon | 0.001 (−0.006 to 0.008) | 0.001 (−0.003 to 0.006) | 1.28 (1.17 to 1.39); 1.25 | 1.28 (1.16 to 1.39); 1.32 |
+| Primary analysis | −0.000 (−0.013 to 0.011) | −0.010 (−0.018 to 0.001) | 1.21 (1.06 to 1.37); 1.19 | 1.13 (0.97 to 1.31); 1.27 |
+| Wild-bird features dated by collection | 0.001 (−0.011 to 0.013) | −0.002 (−0.010 to 0.009) | 1.18 (1.03 to 1.33); 1.17 | 1.11 (0.95 to 1.27); 1.25 |
+| Alternative forest (300 trees, depth 6) | 0.006 (−0.009 to 0.022) | 0.004 (−0.007 to 0.014) | 1.21 (1.06 to 1.37); 1.19 | 1.14 (0.99 to 1.31); 1.29 |
+| WHISPers mortality counts added to the baseline | 0.005 (−0.014 to 0.022) | −0.005 (−0.017 to 0.012) | 1.21 (1.06 to 1.37); 1.18 | 1.13 (0.97 to 1.30); 1.27 |
+| Posts containing a poultry word removed | −0.013 (−0.026 to 0.006) | 0.000 (−0.010 to 0.011) | 1.17 (1.01 to 1.35); 1.15 | 1.14 (0.96 to 1.32); 1.32 |
+| Most active 1% of authors removed | −0.003 (−0.015 to 0.008) | 0.008 (−0.003 to 0.020) | 1.20 (1.04 to 1.35); 1.21 | 1.14 (0.95 to 1.36); 1.17 |
+| X posts located by author profile | not applicable | −0.008 (−0.019 to −0.003) | not applicable | 1.13 (0.98 to 1.30); 1.30 |
+| 30-day onset and 30-day horizon | 0.001 (−0.006 to 0.008) | −0.006 (−0.012 to −0.000) | 1.28 (1.17 to 1.39); 1.25 | 1.28 (1.16 to 1.39); 1.32 |
 
 Notes.
 
 - A poultry word is one of a fixed English and Spanish list (chicken, turkey, flock, layer
   and similar); 32% of Facebook and 23% of X sentiment-set posts contain one.
+- On X, 2 Track A intervals lie below zero (posts located by author profile; 30-day horizon):
+  adding post features made the forecast slightly worse there. No interval lies above zero.
 - The most active authors are the top 1% of each platform's authors by number of labelled
-  posts dated through 2024 (58 of 5,701 on Facebook; 104 of 10,342 on X). Removing them
-  removed 5% of Facebook and 72% of X sighting posts and left 106 sighted X state-weeks in
+  posts dated through 2024 (58 of 5,701 on Facebook; 35 of 3,439 on X). Removing them
+  removed 5% of Facebook and 59% of X sighting posts and left 120 sighted X state-weeks in
   the test period.
 - A 30-day definition of new onset with the 14-day horizon gave results identical to the
   primary analysis, because no confirmation in the outcome file is dated on a Saturday or

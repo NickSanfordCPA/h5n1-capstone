@@ -797,3 +797,139 @@ Unresolved leads are in `self_review.md`.
   search; the 292 and 419 in the timing description above against 290 and 418 elsewhere.
 - Nick's items: IRB determination, Meta publication terms, course AI policy, author order
   and Muthu's role, deadline, Waree's sign-off on the re-dated baseline.
+
+## Update, 2026-11-19: X rerun on Max's re-pull (`x_post_unique_ss`)
+
+*This section is current for every X number. Where it conflicts with an earlier section, this
+one holds. The earlier X outputs are kept in `data\journal\_x_v1_prior_cohort\`.*
+
+**What changed in the data.** Max published `x_post_unique_ss` (287,777 posts) and its raw
+table `x_raw_en_hist` (112,481 lines). The English posts of 2022-06-01 to 2024-12-31 now come
+from twitterapi.io with the same two query groups (`phrases`, `subtypes`) as the 2025+ pull,
+as collector `twitterapi_en_hist` (111,772 posts). The prior cohort's export (`x_csv_raw`,
+364,220 posts) is no longer read. The other collectors are identical to before, post for
+post (176,005 ids, same text, same dates).
+
+**Seam check (shared database, read-only), 2024-12 against 2025-01.**
+
+| Check | Result |
+|---|---|
+| Collector and raw schema | Same on both sides (30 JSON keys, same set) |
+| Query groups | Same two; the same odd terms ("chicken flu", "duck flu", LPAI) appear on both sides; every `subtypes` post names a subtype somewhere in its raw record on both sides |
+| Monthly English posts | 9,948 (2024-12), 11,947 (2025-01); daily counts continuous across the new year |
+| Post mix | Original / reply / quote 45 / 44 / 11% in 2024-12 and 43 / 47 / 11% in 2025-01 |
+| Text | Never truncated on either side (long posts up to about 25,000 characters) |
+| Day assignment | Every row's UTC date equals its query day, both sides |
+| **Completeness** | **Not equal.** The new pull has no rows for 102 of 1,890 query-days (5.4%); 2025+ has 7 of 1,276 (0.5%). On 66 more busy query-days (60 posts or more) it has nothing before 06:00 UTC; 2025+ has 4. About 4,500 posts are missing on the empty days by the neighbouring-day average, on 112,481 collected. The days are scattered through the whole period, not clustered at the seam |
+| Cross-group duplicates | The new pull keeps a post found by both groups twice (709 rows); the 2025+ pull has none. Removed at step 1, no effect |
+
+Reading: the collector switch at the seam is gone. The 2022-2024 pull is about 4 to 7% short
+relative to 2025+, on scattered days. That is small against the earlier break (a different
+scraper, different terms, 72.6k against 28.1k posts across the seam) and it lowers
+development-period counts only. The gap list for Max is `docs\journal_rebuild\x_repull_gaps.csv`
+(179 rows). Labels are keyed by post id, so a later top-up of those days would need readers
+only for the posts it adds.
+
+**The overlap with the prior-cohort corpus is small.** 99,183 of the 111,772 new posts were
+in the prior-cohort corpus, but only those 99,183 of its 364,220 posts return (27%): the
+prior cohort searched broader terms. Of its 31,998 reader-set posts, 9,747 are in the new
+corpus and 8,843 are in the new reader set (867 of the rest are quote posts, which the old
+export did not mark).
+
+**Funnel, X (Meta is identical to the archived build on all 301,044 rows).**
+
+| | X before | X now |
+|---|---:|---:|
+| Rows collected | 603,265 | 289,455 |
+| Unique posts | 540,225 | 287,777 |
+| 2 Not English or Spanish | 22,830 | 21,600 |
+| 3 Outside the window | 26,691 | 26,691 |
+| 4 Quote or reshare | 9,030 | 20,814 |
+| 5 Not about avian influenza | 28,423 | 20,242 |
+| 6 No US state named | 405,078 | 177,384 |
+| 7 More than one state | 4,372 | 2,376 |
+| 8 Copypasta repeat | 3,143 | 338 |
+| **Reader set** | **40,658** | **18,332** |
+| 9 Not about avian influenza (reader) | 2,794 | 1,329 |
+| 10 Not about one US state (reader) | 4,560 | 2,385 |
+| **Sentiment set** | **33,304** | **14,618** |
+| Sighting posts | 3,024 | 1,260 |
+| **Sightings** | **827** | **586** (171 in 2022-24, 415 in 2025+) |
+
+X reader set by collector: `twitterapi_en_hist` 9,670; `twitterapi_en` 6,837; `twitterapi_es`
+1,819; `twitterapi_fr` 6.
+
+**Label carry-over (Nick's decision, 2026-11-19: "same words").** The prior cohort's export
+had lost commas and line breaks, so only 1,673 of the 8,843 returning labelled posts are
+character-identical. `labels.py carry` keeps a label when the wording is the same on letters
+and digits, without links and leading mentions (`same_words_key`): 43,186 labels carried
+(36,265 identical text, 6,921 same words). 1,078 posts went to `wave2`: 249 whose wording
+changed (nearly all were cut short in the old export) and 829 never read (322 new ids, 210
+that earlier steps used to remove, 297 that are now the first copy of a copypasta group).
+
+- `wave2`: 4 batches, two Sonnet reads each (8 runs), all checker-valid, none rerun. Kappa:
+  relevant 0.935, topic 0.868, content class 0.940, local place 0.950, illness 0.955, exclude
+  0.863, place kind 0.903, place state 0.951, sighting candidate 0.966. 85 posts (7.9%)
+  differed on an analysis field; one Opus run adjudicated them (checker-valid).
+- `label_funnel.py merge` now takes `carried.parquet` plus `wave2`; `merged_v1.parquet` and
+  `reader_text_v1.parquet` hold the earlier label table and the text it was read from.
+- X author types: 183 accounts new to the reader set were read twice (`authors.py batches2`,
+  `authors\round2`): agreement 0.978, kappa 0.946, 4 adjudicated by one Opus run. X now has
+  4,900 reader-set authors: 2,128 organisation, 2,772 individual.
+- Sentiment: 7,999 X posts whose text is new or differs in any character were rescored on
+  primary's CPU (`sentiment.py`); the rest keep their 2026-11-17 scores. For the 7,170
+  rescored posts that had an old score, restoring commas and line breaks moved the score by
+  0.037 on average (correlation 0.985) and changed the label of 4.6%.
+
+**Control.** Every Meta row in every result file reproduces the archived run to float
+precision (largest difference 4e-14), so the rerun changed nothing it should not have.
+
+**Results, X.** The 2025+ X posts are the same posts as before, so **every X test-period
+Track B and mechanism number is unchanged** (primary 1.13 (0.97, 1.31), 161 of 418; all
+exclusion windows, cells, news control, risk check, platform comparison). What changed:
+
+| | X before | X now |
+|---|---|---|
+| Track A primary, k = 14, new onset (S4 − S3) | −0.002 (−0.010, +0.006); S3 0.378 | **−0.010 (−0.018, +0.001)**; S3 0.403, S4 0.393 |
+| k = 7 | −0.001 (−0.011, +0.011) | +0.001 (−0.005, +0.011) |
+| k = 28 | +0.003 (−0.005, +0.008) | −0.003 (−0.014, +0.007) |
+| Post windows ending 5 days early | +0.002 (−0.003, +0.006) | −0.004 (−0.014, +0.003) |
+| Volume only / sentiment only | −0.002 / −0.004 | −0.003 (−0.013, +0.012) / +0.002 (−0.007, +0.011) |
+| Block permutation gain (p) | −0.003 (0.90) | −0.005 (0.95) |
+| Offset model, share of posts, new onset | +0.21 (SE 0.08) | +0.23 (SE 0.08), p = 0.003 |
+| Training rows (covered development state-weeks) | 1,975 | 1,108 |
+| Shrinkage pseudocount | 4.66 | 4.14 |
+| Track B, development period, k = 14 | 1.17 (1.02, 1.33); 134 of 346 | 1.27 (1.02, 1.53); 54 of 136 |
+| Track B without top-1% authors | 1.10 (0.88, 1.35); 106 state-weeks; 72% of sighting posts removed | 1.14 (0.95, 1.36); 120 state-weeks; 59% removed (35 of 3,439 authors) |
+| Three largest relay accounts' share of sighting posts | 62% (`account A` 1,279) | 48%: `account B` 389, `account C` 179, `account D` 34; `account A` 25 |
+
+- Track A is still null on X. The estimate is now slightly negative and its upper bound is
+  +0.001. In the sensitivity table two X intervals lie wholly below zero (profile state
+  −0.008 (−0.019, −0.003); 30-day horizon −0.006 (−0.012, −0.000)); none lies above.
+- The development-period X sightings fell from 346 to 136 sighted state-weeks on the grid,
+  mostly because `account A`'s row-by-row posts of the APHIS wild-bird table are not in the
+  new pull. The development-period first-hand and personal cells (18 and 12 state-weeks)
+  show large ratios at long exclusions (3.7 and 3.8 at 10 days); they are tiny
+  development-period cells and are not reported in the paper.
+- County roll-up on X Track A rows: S4 − roll-up +0.051 (−0.024, +0.136) at k = 14 new onset.
+- Supplement: English-only X Track A +0.005 (−0.005, +0.015); emoji-removed X −0.009
+  (−0.016, +0.003); 17% of sentiment-set posts now contain an emoji.
+
+**Documents updated:** `paper\manuscript.md` (and `.docx`), `paper\appendices.md`,
+`supplement.md`, `paper\self_review.md` (M4), `funnel.md`, figures 1 to 4.
+
+**Departure 5 from the protocol (2026-11-19).** The protocol (its X data section and the
+"X collector switch" row of its sensitivity table) describes two English X collectors. There
+is now one. The first-quarter and later-weeks rows are still reported. Labels for returning
+posts were carried over under the same-words rule above instead of being read again.
+
+**Human-validation sample.** 79 of the 204 sampled X posts are no longer in the reader set
+(125 remain; all 196 Meta posts remain). `kappa.py analyse` has **not** been changed yet: it
+must drop those 79 and recompute the X weights against the new strata, and the team decides
+on a top-up. Never-read posts are 829 of 18,332 (4.5% of the X reader set), below the 10-15%
+threshold agreed earlier, but the surviving X sample is 125, not 204.
+
+**Not done.** No independent recomputation. The cross-check with Max's Meta tables was not
+rerun (Meta did not change). The gaps in the new pull are not filled. The "Status at a
+glance" table and the Track B, mechanism and sensitivity tables earlier in this file still
+show the old X development-period and Track A numbers.

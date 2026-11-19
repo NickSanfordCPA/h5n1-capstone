@@ -3,6 +3,7 @@
     uv run python -m h5n1.journal.labels pilot              # pilot batches, 2022-2024 posts only
     uv run python -m h5n1.journal.labels batches            # fix the full batches (once)
     uv run python -m h5n1.journal.labels focus              # unread Meta, then twitterapi X (once)
+    uv run python -m h5n1.journal.labels carry              # after the X re-pull: carry labels, cut wave2
     uv run python -m h5n1.journal.labels status             # which reads are done
     uv run python -m h5n1.journal.labels check <labels.csv> <batch.jsonl>   # validate one CSV
     uv run python -m h5n1.journal.labels agree <dir>        # agreement between the two reads
@@ -20,8 +21,11 @@ from __future__ import annotations
 
 import argparse
 import csv
+import html
 import json
+import re
 import sys
+import unicodedata
 
 import pandas as pd
 
@@ -164,6 +168,77 @@ def focusx(first_unread: int = 95) -> None:
     ins = (LAB / WAVE / "READER_INSTRUCTIONS.md").read_text(encoding="utf-8")
     (d / "READER_INSTRUCTIONS.md").write_text(ins.replace(WAVE, FOCUS_X), encoding="utf-8")
     print(f"{len(p):,} posts in {p['batch'].nunique()} batches under {d}")
+
+
+CARRY_WAVE = "wave2"
+MERGED_V1 = LAB / "merged_v1.parquet"        # the label table built on the prior-cohort X corpus
+TEXT_V1 = LAB / "reader_text_v1.parquet"     # the full text of every post those labels were read from
+CARRIED = LAB / "carried.parquet"
+_URL = re.compile(r"https?://\S+")
+
+
+def same_words_key(s: str) -> str:
+    """The wording of a post, ignoring what the prior cohort's export altered: it had stripped
+    commas and line breaks, and its link and leading-mention text differ from twitterapi's.
+    HTML entities decoded, links and leading @mentions removed, NFKC, case-folded, letters and
+    digits only."""
+    s = unicodedata.normalize("NFKC", _URL.sub("", html.unescape(s or "")))
+    s = re.sub(r"^(?:\s*@\w+)+", "", s.strip())
+    return re.sub(r"[\W_]+", "", s.casefold())
+
+
+def carry() -> None:
+    """After the X re-pull (2026-11-18): give every reader-set post its existing label where it
+    has one, and cut the rest into wave2.
+
+    Labels are keyed by post id. A label carries over when the post is in the old label table
+    and its wording is unchanged (`same_words_key`; Nick's decision 2026-11-19). A returning
+    post whose wording changed, and a post never read before (a new id, or one an earlier
+    funnel step used to remove), goes to wave2 and is read twice like every other post.
+    Refuses to overwrite wave2."""
+    d = LAB / CARRY_WAVE
+    if (d / "manifest.csv").exists():
+        raise SystemExit(f"{d} already has a manifest; batches are fixed and are not rebuilt")
+    p = pd.read_parquet(OUT / "funnel.parquet")
+    p = p[p["reader_set"]].assign(post_id=lambda x: x["post_id"].astype(str))
+    p["id"] = p["platform"].str[0] + p["post_id"]
+    old = pd.read_parquet(MERGED_V1).assign(post_id=lambda x: x["post_id"].astype(str))
+    old_text = pd.read_parquet(TEXT_V1).set_index("id")["text"]
+    p = p.merge(old[["platform", "post_id"]].assign(labelled=True), on=["platform", "post_id"],
+                how="left")
+    p["labelled"] = p["labelled"].fillna(False).astype(bool)
+    p["old_text"] = p["id"].map(old_text)
+    if p.loc[p["labelled"], "old_text"].isna().any():
+        raise SystemExit("a labelled post has no archived text")
+    p["same_text"] = p["labelled"] & (p["old_text"] == p["text"])
+    p["same_words"] = p["labelled"] & pd.Series(
+        [same_words_key(a) == same_words_key(b)
+         for a, b in zip(p["old_text"].fillna(""), p["text"])], index=p.index)
+    p["status"] = "never read"
+    p.loc[p["labelled"], "status"] = "wording changed"
+    p.loc[p["same_words"], "status"] = "carried, same words"
+    p.loc[p["same_text"], "status"] = "carried, identical text"
+    print(pd.crosstab(p["status"], [p["platform"], p["collector"]], margins=True).to_string())
+    meta = p[p["platform"] == "meta"]
+    if not (meta["status"] == "carried, identical text").all():
+        raise SystemExit("a Meta post changed; Meta must be untouched by the X re-pull")
+
+    keep = p.loc[p["same_words"], ["platform", "post_id", "status"]]
+    car = old.merge(keep, on=["platform", "post_id"], validate="1:1").rename(
+        columns={"status": "carry"})
+    car.to_parquet(CARRIED, index=False)
+    todo = p[~p["same_words"]].sample(frac=1, random_state=20261119).reset_index(drop=True)
+    todo["batch"] = todo.index // BATCH
+    for sub_ in ("A", "B"):
+        (d / sub_).mkdir(parents=True, exist_ok=True)
+    for n, g in todo.groupby("batch"):
+        write_batch(g, d / f"batch_{n}.jsonl")
+    todo[["batch", "platform", "collector", "post_id", "status"]].to_csv(d / "manifest.csv",
+                                                                         index=False)
+    ins = (LAB / WAVE / "READER_INSTRUCTIONS.md").read_text(encoding="utf-8")
+    (d / "READER_INSTRUCTIONS.md").write_text(ins.replace(WAVE, CARRY_WAVE), encoding="utf-8")
+    print(f"carried {len(car):,} labels -> {CARRIED}")
+    print(f"{len(todo):,} posts in {todo['batch'].nunique()} batches under {d}")
 
 
 def status(wave: str = WAVE) -> None:
@@ -394,7 +469,7 @@ def adjsummary(wave: str) -> None:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("step", choices=["pilot", "batches", "focus", "focusx", "status", "check",
+    ap.add_argument("step", choices=["pilot", "batches", "focus", "focusx", "carry", "status", "check",
                                      "agree",
                                      "adjbatches", "adjstatus", "adjsummary"])
     ap.add_argument("args", nargs="*")
@@ -407,6 +482,8 @@ if __name__ == "__main__":
         focus()
     elif a.step == "focusx":
         focusx()
+    elif a.step == "carry":
+        carry()
     elif a.step == "status":
         status(*a.args)
     elif a.step == "check":

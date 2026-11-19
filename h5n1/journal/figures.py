@@ -50,18 +50,27 @@ def save(fig, name):
 
 
 def funnel():
-    stages = [("Unique posts", {"meta": 301044, "x": 540225}), ("Reader set", {"meta": 25932, "x": 40658}),
-              ("Sentiment set\n(Track A)", {"meta": 19342, "x": 33304}),
-              ("Sighting posts", {"meta": 1670, "x": 3024}), ("Sightings\n(Track B)", {"meta": 505, "x": 827})]
+    # counted from the funnel files, so the figure cannot drift from funnel.md
+    from h5n1.journal.posts import OUT
+    allp = pd.read_parquet(OUT / "funnel.parquet", columns=["platform"])["platform"].value_counts()
+    lf = pd.read_parquet(OUT / "label_funnel.parquet",
+                         columns=["platform", "sentiment_set", "sighting_post", "step"])
+    by = lambda mask: lf[mask].groupby("platform").size().to_dict()  # noqa: E731
+    stages = [("Unique posts", allp.to_dict()), ("Reader set", by(lf["step"] >= 0)),
+              ("Sentiment set\n(Track A)", by(lf["sentiment_set"])),
+              ("Sighting posts", by(lf["sighting_post"])), ("Sightings\n(Track B)", by(lf["step"] == 0))]
+    print("figure 1 counts:", stages)
     fig, ax = plt.subplots(figsize=(6.6, 3.6))
     for plat, (name, color, marker) in SERIES.items():
         y = [s[1][plat] for s in stages]
         ax.plot(range(len(stages)), y, color=color, marker=marker, markersize=6, linewidth=1.6,
                 markeredgecolor=SURFACE, markeredgewidth=0.8, zorder=3)
         for i, v in enumerate(y):
-            # X labels sit above-right of the marker and Facebook labels below-left, clear of both lines
+            # the larger value's label sits above-right of its marker and the smaller one's
+            # below-left, so each label is next to its own point whichever platform is higher
+            up = v >= max(stages[i][1].values()) and (plat == "meta" or v > min(stages[i][1].values()))
             ax.annotate(f"{v:,}", (i, v), textcoords="offset points", fontsize=8, color=INK,
-                        xytext=(5, 8) if plat == "x" else (-5, -13), ha="left" if plat == "x" else "right")
+                        xytext=(5, 8) if up else (-5, -13), ha="left" if up else "right")
     ax.set_yscale("log")
     ax.set_ylim(200, 1.6e6)
     ax.set_xlim(-0.6, len(stages) - 0.4)

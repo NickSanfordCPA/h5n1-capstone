@@ -8,9 +8,13 @@ Funnel steps 1-3 of docs/journal_rebuild/PROTOCOL.md. Nothing here reads outcome
 
 Inputs
     Meta  data/Meta Public/*.csv   Muthu's Meta Content Library UI export, 29 files
-    X     public.x_csv_raw         prior cohort's scraper export (English, 2022-06..2024-12)
-          public.x_raw             twitterapi.io pulls (en / es / fr), one JSON line per hit
+    X     public.x_raw             twitterapi.io pulls (en / es / fr), one JSON line per hit
+          public.x_raw_en_hist     the same English pull for 2022-06..2024-12 (Max, 2026-11-18)
           (both copied unchanged from the shared database by copy_source.py)
+          Until 2026-11-18 the 2022-06..2024-12 English posts came from the prior cohort's
+          scraper export (public.x_csv_raw, collector 'prev_cohort_en'). It is no longer read:
+          the corpus is now one collector on both sides of 2025-01-01 and equals the shared
+          table x_post_unique_ss.
 
 Outputs (parquet under data/journal/posts/, gitignored)
     raw_rows.parquet   one row per collected row, with `raw_ok` and the collector
@@ -19,7 +23,7 @@ Outputs (parquet under data/journal/posts/, gitignored)
 
 The same column names are used for both platforms, so every later step is one code path:
     platform        'meta' | 'x'
-    collector       'meta_ui_export' | 'prev_cohort_en' | 'twitterapi_en' | 'twitterapi_es'
+    collector       'meta_ui_export' | 'twitterapi_en_hist' | 'twitterapi_en' | 'twitterapi_es'
                     | 'twitterapi_fr'
     post_type       'original' | 'reply' | 'quote' | 'reshare'
     owner_type      Meta's post_owner.type ('page' | 'profile'); NULL on X
@@ -41,7 +45,7 @@ META_DIR = REPO / "data" / "Meta Public"
 COLS = ["platform", "collector", "source", "term", "post_id", "created_at", "lang_platform",
         "post_type", "text", "author_id", "author_name", "author_handle", "owner_type",
         "surface_type", "verified", "verified_type", "followers", "bio", "user_location"]
-COLLECTOR_ORDER = ["meta_ui_export", "prev_cohort_en", "twitterapi_en", "twitterapi_es",
+COLLECTOR_ORDER = ["meta_ui_export", "twitterapi_en_hist", "twitterapi_en", "twitterapi_es",
                    "twitterapi_fr"]
 LANGS_KEPT = ("en", "es")
 MIN_LETTERS = 20      # below this the detector is not trusted and the platform tag is used
@@ -78,28 +82,12 @@ def _meta_raw() -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True)
 
 
-def _x_csv_raw(cn) -> pd.DataFrame:
-    df = pd.read_sql(text("""
-        SELECT post_id, created_at, lang, post_type,
-               COALESCE(NULLIF(note_tweet_text, ''), post_text) AS text,
-               user_id, user_name, alias, verified, followers, bio, user_location,
-               source_query, report_name
-        FROM x_csv_raw"""), cn)
-    return pd.DataFrame({
-        "platform": "x", "collector": "prev_cohort_en", "source": df["report_name"],
-        "term": df["source_query"], "post_id": df["post_id"],
-        "created_at": pd.to_datetime(df["created_at"], errors="coerce", utc=True),
-        "lang_platform": df["lang"], "post_type": df["post_type"], "text": df["text"],
-        "author_id": df["user_id"], "author_name": df["user_name"], "author_handle": df["alias"],
-        "owner_type": None, "surface_type": None,
-        "verified": df["verified"].str.lower().map({"true": True, "false": False}),
-        "verified_type": None, "followers": pd.to_numeric(df["followers"], errors="coerce"),
-        "bio": df["bio"].fillna(""), "user_location": df["user_location"].fillna(""),
-    })
-
-
-def _x_json_raw(cn) -> pd.DataFrame:
-    df = pd.read_sql(text("""
+def _x_json_raw(cn, table: str = "x_raw") -> pd.DataFrame:
+    """One twitterapi.io JSON-lines table. x_raw holds the en / es / fr pulls; x_raw_en_hist is
+    the English pull of 2022-06..2024-12 with the same two query groups (lines carry `_g`
+    only, so the collector is named by the table)."""
+    hist = table == "x_raw_en_hist"
+    df = pd.read_sql(text(f"""
         SELECT t->>'id' AS post_id, t->>'createdAt' AS created_at, t->>'lang' AS lang,
                CASE WHEN (t->>'isReply')::boolean OR (t->>'inReplyToId') IS NOT NULL THEN 'reply'
                     WHEN jsonb_typeof(t->'quoted_tweet') = 'object' THEN 'quote'
@@ -117,7 +105,11 @@ def _x_json_raw(cn) -> pd.DataFrame:
                     ELSE 'twitterapi_en' END AS collector,
                COALESCE(line->>'_kw', line->>'_g') AS term,
                line->>'_tier' AS tier
-        FROM x_raw, LATERAL (SELECT line->'t' AS t) j, LATERAL (SELECT t->'author' AS a) u"""), cn)
+        FROM {table}, LATERAL (SELECT line->'t' AS t) j, LATERAL (SELECT t->'author' AS a) u"""), cn)
+    if hist:
+        if not (df["collector"] == "twitterapi_en").all():
+            raise RuntimeError("x_raw_en_hist holds lines that are not the English pull")
+        df["collector"] = "twitterapi_en_hist"
     return pd.DataFrame({
         "platform": "x", "collector": df["collector"],
         "source": df["tier"].fillna("twitterapi"), "term": df["term"], "post_id": df["post_id"],
@@ -134,7 +126,8 @@ def _x_json_raw(cn) -> pd.DataFrame:
 def raw() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     with local_engine().connect() as cn:
-        df = pd.concat([_meta_raw(), _x_csv_raw(cn), _x_json_raw(cn)], ignore_index=True)[COLS]
+        df = pd.concat([_meta_raw(), _x_json_raw(cn, "x_raw_en_hist"), _x_json_raw(cn)],
+                       ignore_index=True)[COLS]
     df["text"] = df["text"].fillna("")
     types = {"original", "reply", "quote", "reshare"}
     df["raw_ok"] = (df["created_at"].notna() & df["post_type"].isin(types)
