@@ -10,7 +10,9 @@ Inputs
     Meta  data/Meta Public/*.csv   Muthu's Meta Content Library UI export, 29 files
     X     public.x_raw             twitterapi.io pulls (en / es / fr), one JSON line per hit
           public.x_raw_en_hist     the same English pull for 2022-06..2024-12 (Max, 2026-11-18)
-          (both copied unchanged from the shared database by copy_source.py)
+          public.x_raw_repair      Max's re-run of the missing and cut-short (query, day) pairs
+                                   of all three pulls (2026-11-19); lines carry `_repair`
+          (all copied unchanged from the shared database by copy_source.py)
           Until 2026-11-18 the 2022-06..2024-12 English posts came from the prior cohort's
           scraper export (public.x_csv_raw, collector 'prev_cohort_en'). It is no longer read:
           the corpus is now one collector on both sides of 2025-01-01 and equals the shared
@@ -47,6 +49,7 @@ COLS = ["platform", "collector", "source", "term", "post_id", "created_at", "lan
         "surface_type", "verified", "verified_type", "followers", "bio", "user_location"]
 COLLECTOR_ORDER = ["meta_ui_export", "twitterapi_en_hist", "twitterapi_en", "twitterapi_es",
                    "twitterapi_fr"]
+HIST_END = "2025-01-01"   # English query days before this belong to the 2022-06..2024-12 pull
 LANGS_KEPT = ("en", "es")
 MIN_LETTERS = 20      # below this the detector is not trusted and the platform tag is used
 
@@ -104,12 +107,19 @@ def _x_json_raw(cn, table: str = "x_raw") -> pd.DataFrame:
                     WHEN line ? '_tier' THEN 'twitterapi_fr'
                     ELSE 'twitterapi_en' END AS collector,
                COALESCE(line->>'_kw', line->>'_g') AS term,
-               line->>'_tier' AS tier
+               line->>'_tier' AS tier, line->>'_day' AS query_day
         FROM {table}, LATERAL (SELECT line->'t' AS t) j, LATERAL (SELECT t->'author' AS a) u"""), cn)
     if hist:
         if not (df["collector"] == "twitterapi_en").all():
             raise RuntimeError("x_raw_en_hist holds lines that are not the English pull")
         df["collector"] = "twitterapi_en_hist"
+    if table == "x_raw_repair":
+        # the repair re-ran single (query, day) pairs of every pull; an English line belongs
+        # to the 2022-06..2024-12 pull when its query day is before 2025-01-01
+        if df["query_day"].isna().any():
+            raise RuntimeError("x_raw_repair holds lines without a query day")
+        early = (df["collector"] == "twitterapi_en") & (df["query_day"] < HIST_END)
+        df.loc[early, "collector"] = "twitterapi_en_hist"
     return pd.DataFrame({
         "platform": "x", "collector": df["collector"],
         "source": df["tier"].fillna("twitterapi"), "term": df["term"], "post_id": df["post_id"],
@@ -126,8 +136,8 @@ def _x_json_raw(cn, table: str = "x_raw") -> pd.DataFrame:
 def raw() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     with local_engine().connect() as cn:
-        df = pd.concat([_meta_raw(), _x_json_raw(cn, "x_raw_en_hist"), _x_json_raw(cn)],
-                       ignore_index=True)[COLS]
+        df = pd.concat([_meta_raw(), _x_json_raw(cn, "x_raw_en_hist"), _x_json_raw(cn),
+                        _x_json_raw(cn, "x_raw_repair")], ignore_index=True)[COLS]
     df["text"] = df["text"].fillna("")
     types = {"original", "reply", "quote", "reshare"}
     df["raw_ok"] = (df["created_at"].notna() & df["post_type"].isin(types)

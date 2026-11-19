@@ -2,6 +2,7 @@
 
     uv run python -m h5n1.journal.authors batches     # X accounts that need a reader
     uv run python -m h5n1.journal.authors batches2    # after the X re-pull: accounts not yet typed
+    uv run python -m h5n1.journal.authors batches3    # after the repair pull: the same, round3
     uv run python -m h5n1.journal.authors status
 
 Meta: from post_owner.type, no reader (Page -> organisation, profile -> individual).
@@ -25,6 +26,7 @@ from h5n1.journal.posts import OUT
 
 LAB = DATA_DIR / "labels" / "authors"
 ROUND2 = LAB / "round2"     # accounts that entered the reader set with the X re-pull (2026-11-19)
+ROUND3 = LAB / "round3"     # accounts that entered with the repair of missing query-days
 BATCH = 500
 ORG_VERIFIED = {"Business", "Government"}
 
@@ -62,16 +64,17 @@ def batches(seed: int = 20261117) -> None:
           f"{need['batch'].nunique()} batches of {BATCH}")
 
 
-def batches2() -> None:
-    """After the X re-pull: the reader-set accounts that have no type yet, as one more round
-    with the same layout under authors/round2. Accounts typed in round 1 keep their type (it
-    is keyed by account id). Refuses to overwrite."""
+def batches2(ROUND2=ROUND2, seed: int = 20261119) -> None:
+    """After the X re-pull (round2) or the repair pull (round3): the reader-set accounts that
+    have no type yet, as one more round with the same layout. Accounts typed in an earlier
+    round keep their type (it is keyed by account id). Refuses to overwrite."""
     if (ROUND2 / "manifest.csv").exists():
         raise SystemExit(f"{ROUND2} already has a manifest; batches are fixed and are not rebuilt")
-    done = set(pd.read_csv(LAB / "manifest.csv", dtype=str)["author_id"])
+    done = set(pd.concat([pd.read_csv(lab / "manifest.csv", dtype=str)
+                          for lab in _rounds()])["author_id"])
     a = x_authors()
     need = a[~a["from_metadata"] & ~a["author_id"].isin(done)]
-    need = need.sample(frac=1, random_state=20261119).reset_index(drop=True)
+    need = need.sample(frac=1, random_state=seed).reset_index(drop=True)
     need["batch"] = need.index // BATCH
     for sub in ("A", "B"):
         (ROUND2 / sub).mkdir(parents=True, exist_ok=True)
@@ -85,7 +88,7 @@ def batches2() -> None:
     need[["batch", "author_id"]].to_csv(ROUND2 / "manifest.csv", index=False)
     (ROUND2 / "READER_INSTRUCTIONS.md").write_text(INSTRUCTIONS.format(d=str(ROUND2)),
                                                    encoding="utf-8")
-    print(f"X reader-set authors {len(a):,}; typed in round 1 "
+    print(f"X reader-set authors {len(a):,}; typed in an earlier round "
           f"{int(a['author_id'].isin(done).sum()):,}; to readers {len(need):,} in "
           f"{need['batch'].nunique()} batch(es) under {ROUND2}")
 
@@ -147,7 +150,7 @@ def _valid(folder, batch_dir) -> tuple[list[int], list[int]]:
 
 
 def _rounds() -> list:
-    return [LAB] + ([ROUND2] if (ROUND2 / "manifest.csv").exists() else [])
+    return [LAB] + [r for r in (ROUND2, ROUND3) if (r / "manifest.csv").exists()]
 
 
 def status() -> None:
@@ -249,6 +252,9 @@ def merge() -> None:
                       "source": np.where(lab.index.isin(adj.index), "adjudicated", "reads")})
     xa = x_authors()
     meta_x = xa.loc[xa["from_metadata"], ["author_id"]].assign(author_type="organisation", source="verified_type")
+    # the metadata rule comes first: an account read in an earlier round whose latest
+    # reader-set post now carries a Business or Government verifiedType is typed by that
+    x = x[~x["author_id"].isin(set(meta_x["author_id"]))]
     x = pd.concat([x, meta_x]).assign(platform="x")
     # accounts typed in round 1 that the X re-pull took out of the reader set are not used
     x = x[x["author_id"].isin(set(xa["author_id"]))]
@@ -292,11 +298,12 @@ if __name__ == "__main__":
     import numpy as np
 
     ap = argparse.ArgumentParser()
-    ap.add_argument("step", choices=["batches", "batches2", "instructions", "status", "check", "agree", "adjbatches",
+    ap.add_argument("step", choices=["batches", "batches2", "batches3", "instructions", "status", "check", "agree", "adjbatches",
                                      "merge"])
     ap.add_argument("args", nargs="*")
     a = ap.parse_args()
     if a.step == "check":
         raise SystemExit(check(*a.args))
-    {"batches": batches, "batches2": batches2, "instructions": instructions, "status": status, "agree": agree,
+    {"batches": batches, "batches2": batches2,
+     "batches3": lambda: batches2(ROUND3, 20261120), "instructions": instructions, "status": status, "agree": agree,
      "adjbatches": adjbatches, "merge": merge}[a.step]()

@@ -7,7 +7,8 @@
 merge: one row per reader-set post. Since the X re-pull (2026-11-19) the rows come from two
 places: labels carried over from the table built on the earlier corpus (labels/carried.parquet,
 written by `labels.py carry`; those rows were merged from wave1 batches 0-94, wave1f and wave1x
-by this same rule), and wave2, the posts read after the re-pull.
+by this same rule), wave2, the posts read after the re-pull, and wave3, the posts read after
+the repair of the missing query-days (labels/carried3.parquet holds the kept rows).
 
   * Where the two reads differed on an analysis field the post was adjudicated, and the
     adjudicator's whole row is used. Its topic is not: protocol 6.1 keeps read A's topic.
@@ -38,8 +39,10 @@ from h5n1.journal.labels import FIELDS, LAB, STATES, derive
 from h5n1.journal.localdb import REPO, assert_local, local_engine
 from h5n1.journal.posts import OUT
 
-WAVES = {"wave2": None}   # wave -> first superseded batch. The earlier waves arrive carried.
-CARRIED = LAB / "carried.parquet"
+# wave -> first superseded batch. Earlier waves arrive in the kept-label file, which
+# labels.py carry3 cut from the previous label table (it keeps each row's original wave).
+WAVES = {"wave3": None}
+CARRIED = LAB / "carried3.parquet"
 MERGED = LAB / "merged.parquet"
 FUNNEL = OUT / "label_funnel.parquet"
 DOC = REPO / "docs" / "journal_rebuild" / "funnel.md"
@@ -123,7 +126,7 @@ def merge() -> None:
             "COMMENT ON TABLE journal.post_label IS 'Journal rebuild: one reader label row per "
             "reader-set post. Adjudicated row where the two reads differed on an analysis field, "
             "otherwise read A (reads agree on those fields). After the X re-pull: carried labels "
-            "plus wave2. Built by label_funnel.py merge.'"))
+            "plus wave2 and wave3. Built by label_funnel.py merge.'"))
     print(f"{len(lab):,} posts -> {MERGED} and journal.post_label")
     print(lab.groupby(["platform", "label_source"]).size().unstack().to_string())
 
@@ -333,13 +336,16 @@ def report() -> None:
       "period. Labels are keyed by post id. A post keeps its label when it returns with the "
       "same wording (the earlier export had lost commas and line breaks, so wording is compared "
       "on letters and digits only, without links); every other reader-set post was read twice "
-      "after the re-pull.\n")
+      "after the re-pull. On 2026-11-19 the collector re-ran the query-days that had returned "
+      "nothing or had been cut short; posts that entered the reader set then were read twice in "
+      "the same way.\n")
     w("| Label origin | Meta | X |")
     w("|---|---:|---:|")
     wv = d[["platform", "post_id"]].merge(pd.read_parquet(MERGED, columns=["platform", "post_id", "wave"]),
                                           on=["platform", "post_id"], validate="1:1")["wave"]
-    w(_row("Read before the re-pull, label carried", n((wv != "wave2").to_numpy())))
+    w(_row("Read before the re-pull, label carried", n((~wv.isin(["wave2", "wave3"])).to_numpy())))
     w(_row("Read after the re-pull", n((wv == "wave2").to_numpy())))
+    w(_row("Read after the repair of missing query-days", n((wv == "wave3").to_numpy())))
     w("")
     DOC.write_text("\n".join(L), encoding="utf-8")
     print(f"wrote {DOC}")

@@ -156,6 +156,15 @@ The paper describes itself as exploratory.
   particular objection no longer applies. The X test-period Track B and mechanism numbers
   did not change, because the 2025-2026 posts are the same posts; X Track A is now −0.010
   (95% CI −0.018 to 0.001).
+- Update, 2026-11-19, later the same day: point (a) is resolved. The collector re-ran the
+  missing and cut-short query-days (233 English query-days, 22,425 more unique posts), and the
+  whole analysis was rerun. Of 3,166 English query-days, 6 still have no rows and 1 is still
+  cut short. The repair also added posts to 2025-2026, so the X test-period numbers moved:
+  Track B is 1.15 (95% CI 0.99 to 1.32) from 424 state-weeks and Track A is 0.000 (95% CI
+  −0.011 to 0.011). Every Facebook number was reproduced. Point (b) stands: 3 accounts wrote
+  47% of X sighting posts, and without the top 1% of authors the ratio is 1.15 (95% CI 0.97
+  to 1.36) from 122 state-weeks. The numbers quoted elsewhere in this review are those of
+  the draft reviewed and were not updated.
 
 ## Minor comments
 

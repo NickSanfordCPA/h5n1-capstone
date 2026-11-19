@@ -4,6 +4,7 @@
     uv run python -m h5n1.journal.labels batches            # fix the full batches (once)
     uv run python -m h5n1.journal.labels focus              # unread Meta, then twitterapi X (once)
     uv run python -m h5n1.journal.labels carry              # after the X re-pull: carry labels, cut wave2
+    uv run python -m h5n1.journal.labels carry3             # after the X repair pull: keep labels, cut wave3
     uv run python -m h5n1.journal.labels status             # which reads are done
     uv run python -m h5n1.journal.labels check <labels.csv> <batch.jsonl>   # validate one CSV
     uv run python -m h5n1.journal.labels agree <dir>        # agreement between the two reads
@@ -241,6 +242,68 @@ def carry() -> None:
     print(f"{len(todo):,} posts in {todo['batch'].nunique()} batches under {d}")
 
 
+REPAIR_WAVE = "wave3"
+MERGED_V2 = LAB / "merged_v2.parquet"        # the label table before the repair pull (carried + wave2)
+TEXT_V2 = LAB / "reader_text_v2.parquet"     # the text of every reader-set post at that point
+CARRIED3 = LAB / "carried3.parquet"
+
+
+def carry3() -> None:
+    """After Max's repair of the missing and cut-short query-days (x_raw_repair, 2026-11-19):
+    every reader-set post that already has a label keeps it when its wording is unchanged
+    (`same_words_key`, the same rule as `carry`); the rest are cut into wave3 and read twice.
+    Writes labels/carried3.parquet (the kept rows of the earlier label table, with their
+    original `wave`). Refuses to overwrite wave3."""
+    d = LAB / REPAIR_WAVE
+    if (d / "manifest.csv").exists():
+        raise SystemExit(f"{d} already has a manifest; batches are fixed and are not rebuilt")
+    p = pd.read_parquet(OUT / "funnel.parquet")
+    p = p[p["reader_set"]].assign(post_id=lambda x: x["post_id"].astype(str))
+    p["id"] = p["platform"].str[0] + p["post_id"]
+    old = pd.read_parquet(MERGED_V2).assign(post_id=lambda x: x["post_id"].astype(str))
+    old_text = pd.read_parquet(TEXT_V2).set_index("id")["text"]
+    p = p.merge(old[["platform", "post_id"]].assign(labelled=True), on=["platform", "post_id"],
+                how="left")
+    p["labelled"] = p["labelled"].fillna(False).astype(bool)
+    p["old_text"] = p["id"].map(old_text)
+    if p.loc[p["labelled"], "old_text"].isna().any():
+        raise SystemExit("a labelled post has no archived text")
+    p["same_text"] = p["labelled"] & (p["old_text"] == p["text"])
+    p["same_words"] = p["labelled"] & pd.Series(
+        [same_words_key(a) == same_words_key(b)
+         for a, b in zip(p["old_text"].fillna(""), p["text"])], index=p.index)
+    p["status"] = "never read"
+    p.loc[p["labelled"], "status"] = "wording changed"
+    p.loc[p["same_words"], "status"] = "kept, same words"
+    p.loc[p["same_text"], "status"] = "kept, identical text"
+    print(pd.crosstab(p["status"], [p["platform"], p["collector"]], margins=True).to_string())
+    meta = p[p["platform"] == "meta"]
+    if not (meta["status"] == "kept, identical text").all():
+        raise SystemExit("a Meta post changed; Meta must be untouched by the X repair")
+    gone = old.merge(p[["platform", "post_id"]], on=["platform", "post_id"], how="left",
+                     indicator=True)
+    print("labelled posts no longer in the reader set:",
+          gone[gone["_merge"] == "left_only"].groupby("platform").size().to_dict())
+
+    keep = p.loc[p["same_words"], ["platform", "post_id", "status"]]
+    car = old.merge(keep, on=["platform", "post_id"], validate="1:1").rename(
+        columns={"status": "carry"})
+    car.to_parquet(CARRIED3, index=False)
+    todo = p[~p["same_words"]].sample(frac=1, random_state=20261120).reset_index(drop=True)
+    todo["batch"] = todo.index // BATCH
+    for sub_ in ("A", "B"):
+        (d / sub_).mkdir(parents=True, exist_ok=True)
+    for n, g in todo.groupby("batch"):
+        write_batch(g, d / f"batch_{n}.jsonl")
+    todo[["batch", "platform", "collector", "post_id", "status"]].to_csv(d / "manifest.csv",
+                                                                         index=False)
+    ins = (LAB / WAVE / "READER_INSTRUCTIONS.md").read_text(encoding="utf-8")
+    (d / "READER_INSTRUCTIONS.md").write_text(ins.replace(WAVE, REPAIR_WAVE), encoding="utf-8")
+    print(f"kept {len(car):,} labels -> {CARRIED3}")
+    print(f"{len(todo):,} posts in {todo['batch'].nunique()} batches under {d}")
+    print(todo.groupby(["platform", "collector"]).size().to_string())
+
+
 def status(wave: str = WAVE) -> None:
     """Which reads are done: a read counts only if its CSV exists and passes the checker."""
     d = LAB / wave
@@ -469,7 +532,7 @@ def adjsummary(wave: str) -> None:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("step", choices=["pilot", "batches", "focus", "focusx", "carry", "status", "check",
+    ap.add_argument("step", choices=["pilot", "batches", "focus", "focusx", "carry", "carry3", "status", "check",
                                      "agree",
                                      "adjbatches", "adjstatus", "adjsummary"])
     ap.add_argument("args", nargs="*")
@@ -484,6 +547,8 @@ if __name__ == "__main__":
         focusx()
     elif a.step == "carry":
         carry()
+    elif a.step == "carry3":
+        carry3()
     elif a.step == "status":
         status(*a.args)
     elif a.step == "check":

@@ -988,3 +988,105 @@ files.
 
 **Open, for the team:** whether to draw a top-up. English X sightings are the thin cell that
 matters most: 14 coded posts stand for 1,230.
+
+## Update, 2026-11-19, third part: X rerun after the repair of the missing query-days
+
+*Current for every X number. Overrides the X numbers in the two sections above and in the
+older tables of this file.*
+
+**What happened.** Max re-ran the query-days listed in `x_repull_gaps.csv` and published the
+result: a new raw table `x_raw_repair` (37,426 lines, each marked `_repair`) and a larger
+`x_post_unique_ss` (287,777 to 310,202 posts). Nick asked for the repair to be confirmed and
+the X analysis rerun.
+
+**Is the repair real? Yes.**
+
+| Check (English query-days, 2022-06 to 2026-09) | Before | After |
+|---|---:|---:|
+| No rows for the query group on the day, 2022-24 | 102 | 5 |
+| Cut short (no posts before 06:00 UTC on a busy day), 2022-24 | 66 | 1 |
+| No rows, 2025-26 | 7 | 1 |
+| Cut short, 2025-26 | 4 | 0 |
+
+- 173 of the 179 listed query-days now have posts. The 6 still empty are all `subtypes`
+  days with 8 to 16 posts on neighbouring days. Each cut-short day now starts within the
+  first hour except one (2024-11-23, first post 07:48).
+- Repaired empty days hold a median of 1.2 times their neighbours' mean; repaired cut-short
+  days hold a median of 1.9 times what they held before.
+- Max went beyond the list: 233 English query-days were re-run in all (60 not on the list,
+  many of them days that had stopped at 40 posts), plus Spanish (5,649 lines) and French (429)
+  days, and some days before June 2022 that the analysis window drops.
+- 37,386 repair posts: 14,961 were already in the corpus and 22,425 are new. The union of
+  the three raw tables equals `x_post_unique_ss` exactly (310,202 ids, none missing either
+  way), and `posts.py` reproduces that count.
+- The 7 remaining days are in `x_repull_gaps.csv`; the earlier list is kept as
+  `x_repull_gaps_before_repair.csv` (both git-ignored).
+
+**Pipeline changes.**
+
+- `posts.py` reads `x_raw_repair`; an English repair line belongs to the 2022-24 collector
+  when its query day is before 2025-01-01. `copy_source.py` copies the table.
+- `labels.py carry3`: a reader-set post with a label keeps it when its wording is unchanged
+  (the same-words rule); the rest are cut into `wave3`. All 44,247 returning posts had
+  identical text. 17 labelled X posts left the reader set (not traced; the likely cause is that a newly collected
+  earlier copy of the same text now takes their place).
+- `label_funnel.py` merges the kept labels (`labels/carried3.parquet`) with `wave3`.
+- `authors.py`: third typing round (`authors/round3`); an account read earlier that now
+  carries a Business or Government `verifiedType` is typed by the metadata rule (2 accounts).
+- `sentiment.py`: scores are kept where the text is identical; 1,465 posts scored on CPU.
+- `kappa.py`: posts read in `wave3` count as re-read, like `wave2`.
+- Archive of the pre-repair run: `data/journal/_x_v2_before_repair/`.
+
+**Reading (Nick authorised all 15 runs).** 1,465 posts in 5 batches, read twice by Sonnet;
+kappa 0.92 relevance, 0.92 content class, 0.96 state, 0.94 sighting candidate; 118 posts
+(8.1%) adjudicated by Opus. 63 new authors read twice; 1 adjudicated. All 15 runs passed
+their checkers.
+
+**Counts.**
+
+| | Before repair | After |
+|---|---:|---:|
+| Unique X posts | 287,777 | 310,202 |
+| X reader set | 18,332 | 19,780 |
+| X sentiment set | 14,618 | 15,756 |
+| X sighting posts | 1,260 | 1,317 |
+| X sightings (state-weeks, all periods) | 586 | 601 |
+
+Of the 1,465 new reader-set posts, 1,303 are English 2022-24, 130 English 2025-26 and 32
+Spanish. Because 2025-26 gained posts, the X test-period numbers moved this time.
+
+**Results, X (Facebook reproduced in every file, largest difference 4e-14).**
+
+| | Before repair | After |
+|---|---|---|
+| Track B primary, test (14 days) | 1.13 (0.97, 1.31); 161 of 418 | 1.15 (0.99, 1.32); 164 of 424 |
+| Track B, first 5 days excluded | 1.27 (1.06, 1.51) | 1.30 (1.08, 1.55) |
+| Track B, 7 days / 28 days | 1.12 / 1.28 | 1.10 / 1.28 |
+| Track B, development period | 1.27 (1.02, 1.53); 136 | 1.27 (1.04, 1.51); 145 |
+| Track A primary (new onset, 14 days) | −0.010 (−0.018, +0.001) | +0.000 (−0.011, +0.011) |
+| Track B without top-1% authors | 1.14 (0.95, 1.36); 120 state-weeks | 1.15 (0.97, 1.36); 122 state-weeks |
+| Wildlife-report sightings | 1.15 (0.98, 1.32); 410 | 1.16 (1.00, 1.33); 416 |
+| Within fifths of expected risk | 1.14 | 1.16 |
+| Recalibrated odds ratio | 1.32 (0.99, 1.75) | 1.35 (1.02, 1.79) |
+| Platform ratio of O/E ratios (Facebook over X) | 1.06 (0.89, 1.26) | 1.05 (0.88, 1.25) |
+| Three largest accounts' share of sighting posts | 48% (602 of 1,260) | 47% (622 of 1,317) |
+
+- No conclusion changes. X Track B is still just short of the reading rule (lower bound
+  0.985). X Track A is still null; its estimate moved from −0.010 to 0.000 on almost the
+  same rows (588 against 585), which shows how little the Track A point estimates mean at
+  this size. The earlier interval had nearly excluded zero on the negative side; the new one
+  is centred on zero.
+- Track A sensitivity on X: 1 of 8 intervals is below zero (the alternative forest, −0.017),
+  where before it was 2 (profile location and the 30-day horizon). These flip with small
+  changes in the data and should not be interpreted.
+
+**Human-validation sample.** `kappa.py retained` now finds 326 of 400 posts in the reader set
+(196 Facebook, 130 X). The 5 posts that came back were read again in `wave3`, so the primary
+scope is unchanged at 319 posts.
+
+**Documents updated.** `paper/manuscript.md` and `.docx`, `paper/appendices.md`,
+`paper/self_review.md` (M4), `supplement.md`, `funnel.md`, all four figures.
+
+**Not done.** The older tables in this file still show earlier X numbers. `PROTOCOL.md` is
+unchanged. The Spanish and French pulls were not gap-checked by query group. No result has
+been independently recomputed.

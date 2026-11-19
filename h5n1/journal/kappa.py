@@ -332,7 +332,7 @@ def retained(verbose: bool = True) -> pd.DataFrame:
         now[["platform", "post_id"] + cols].rename(columns={c: f"cur_{c}" for c in cols}),
         on=["platform", "post_id"], how="left", validate="1:1").set_index("item").loc[key.index]
     m["in_corpus"] = m.cur_stratum.notna()
-    m["reread"] = m.cur_wave.eq("wave2")
+    m["reread"] = m.cur_wave.isin(["wave2", "wave3"])
     cell = ["cur_stratum", "platform", "lang"]
     pop = now.groupby(["stratum", "platform", "lang"]).size().rename("population_now")
     kept = m[m.in_corpus].groupby(cell).size().rename("retained")
@@ -341,7 +341,7 @@ def retained(verbose: bool = True) -> pd.DataFrame:
     kept.index.names = pop.index.names
     design = pd.concat([drawn, pop, kept], axis=1).fillna(0).astype(int).reset_index()
     design["weight_now"] = (design.population_now / design.retained).where(design.retained > 0)
-    new_ids = now[now.wave == "wave2"].groupby(["stratum", "platform", "lang"]).size()
+    new_ids = now[now.wave.isin(["wave2", "wave3"])].groupby(["stratum", "platform", "lang"]).size()
     design["never_sampled"] = [int(new_ids.get(tuple(r), 0)) for r in
                                design[["stratum", "platform", "lang"]].itertuples(index=False)]
     w = design.set_index(["stratum", "platform", "lang"]).weight_now

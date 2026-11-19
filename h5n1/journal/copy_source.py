@@ -36,6 +36,7 @@ TABLES = [
     "fact_gdelt_article", "fact_gdelt_location", "fact_gdelt_denominator", "fact_gdelt_gcam",
     "x_raw", "x_csv_raw",
     "x_raw_en_hist",   # Max's 2022-06..2024-12 English re-pull (2026-11-18); replaces x_csv_raw
+    "x_raw_repair",    # Max's re-run of missing and cut-short query-days (2026-11-19)
     "schema_migrations", "model_build_log",
 ]
 
