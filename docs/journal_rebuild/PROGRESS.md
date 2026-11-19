@@ -933,3 +933,58 @@ threshold agreed earlier, but the surviving X sample is 125, not 204.
 rerun (Meta did not change). The gaps in the new pull are not filled. The "Status at a
 glance" table and the Track B, mechanism and sensitivity tables earlier in this file still
 show the old X development-period and Track A numbers.
+
+## Update, 2026-11-19, second part: human-validation analysis after the X re-pull
+
+*Supersedes the "Human-validation sample" paragraph of the section above, which said
+`kappa.py analyse` had not been changed.*
+
+**What changed (`h5n1\journal\kappa.py`).** The sample and the three workbooks are untouched;
+coders finish all 400 items. A new step, `kappa.py retained`, compares the drawn sample with
+the reader set as it is now and writes `docs\journal_rebuild\coding\sample_design_current.csv`
+(counts only). `analyse` now reports the coder majority against the reader labels in four
+scopes:
+
+1. **Primary: the current reader set, weighted.** Posts still in the reader set, with the
+   labels the analysis uses now, weighted by current cell population over retained posts in
+   the cell (post-stratification on stratum, platform and language).
+2. All 400 coded posts against the label each had when the sample was drawn, unweighted. This
+   speaks to the reading method only, not to the current corpus.
+3. and 4. The same unweighted comparison split into posts still in the reader set and posts
+   no longer in it.
+
+Agreement among the three coders still uses all 400 items.
+
+**What is left of the sample.** 321 of 400 posts: all 196 Facebook posts and 125 of 204 X
+posts. Every one of the 79 lost posts is an English X post; all 52 Spanish X posts remain.
+
+| English X stratum | Sampled | Retained | Reader-set posts now | Never eligible for the draw |
+|---|---:|---:|---:|---:|
+| Sighting | 35 | 14 | 1,230 | 46 |
+| Disagreement | 21 | 9 | 1,413 | 83 |
+| Not included | 14 | 7 | 2,807 | 280 |
+| Domestic detection | 19 | 10 | 3,238 | 167 |
+| Wildlife report | 19 | 7 | 1,143 | 73 |
+| First-hand | 25 | 13 | 71 | 3 |
+| Other | 19 | 13 | 6,616 | 426 |
+| **All English X** | **152** | **73** | **16,518** | **1,078** |
+
+- No cell that has posts now is left without a retained sample, so the weights cover the
+  whole reader set. One cell has fewer than 5 retained posts (Spanish X first-hand: 1 of 1).
+- 2 retained X posts had their wording changed in the re-pull and were read again. The coders
+  saw the old text, so the primary scope leaves them out (319 posts). 1 retained post changed
+  stratum. No retained post changed geocoded state.
+- "Never eligible" are reader-set posts read after the draw (`wave2`): 1,078 of the 16,518
+  English X posts (6.5%). The weights treat them like the other posts in their cell.
+- X authors in the primary scope: 103 of the 156 sampled.
+
+**Defaults chosen without asking.** Post-stratification on the current cells, not the
+original design weights; the 2 re-read posts left out of the primary; no top-up drawn.
+
+**Test.** `analyse` ran end to end on simulated workbooks (labels at the draw with 10% noise
+per field): all four scopes report, and the "no longer in the reader set" scope has 79
+posts. The simulated numbers mean nothing. Real agreement still waits for the three coded
+files.
+
+**Open, for the team:** whether to draw a top-up. English X sightings are the thin cell that
+matters most: 14 coded posts stand for 1,230.
