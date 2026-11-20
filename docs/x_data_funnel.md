@@ -125,11 +125,12 @@ every term that found the post is listed in `search_terms`.
   (like counts captured at different times). The kept row is the one the pipeline used.
 - Nothing about the post is judged; it's a straight ID match.
 
-Examples (terms that found it → post):
-- `Avian influenza | H5N1 | HPAI` → "Five H5N1 HPAI Green Winged Teals Greene County Indiana -
-  Recombinomics Inc. map update…"
-- `H5N1 | H7N9 | HPAI` → "The Spanish Flu was H1N1 not H7N9 … HPAI typically refers to H7N9 and
-  H5N1 strains."
+Examples (terms that found it → what the post was; examples in this document are described,
+not quoted):
+- `Avian influenza | H5N1 | HPAI` → a tracker's map update listing wild ducks that tested
+  positive in one Indiana county.
+- `H5N1 | H7N9 | HPAI` → a reply correcting someone about which subtype caused the 1918
+  pandemic, naming three subtypes in passing.
 </details>
 
 ### 2. Outside date window · *Metadata rule*
@@ -148,9 +149,9 @@ comparison.
 - **prior** loses nothing: the scraper only covered 2022-06..2024-12.
 
 Examples (removed from en_test):
-- 2022-03-02: "BREAKING: Iowa confirms a positive case of highly pathogenic avian influenza
-  (HPAI) in a backyard poultry flock."
-- 2022-05-21: "'Heartbreaking' loss as avian influenza hits backyard chicken flocks in Alberta"
+- 2022-03-02: a breaking-news post that Iowa had confirmed HPAI in a backyard flock.
+- 2022-05-21: a news headline about backyard flocks lost to avian influenza in a Canadian
+  province.
 </details>
 
 ### 3. Quote post · *Metadata rule*
@@ -167,8 +168,9 @@ comparable.
 - The quoted post's text isn't in the row, so a quote is often hard to read on its own anyway.
 
 Examples (removed from en_test):
-- 2025-01-01: "How can doctors be so stupid? #H5N1 #maskup"
-- 2026-05-17: "$3K to $24K so far from here. $H5N1 study."
+- 2025-01-01: a one-line complaint about doctors, with two hashtags; the post it comments on is
+  not in the row.
+- 2026-05-17: a remark about a price rise that uses H5N1 as a ticker symbol.
 </details>
 
 ### 4. No US state · *Word mapping*
@@ -201,12 +203,13 @@ A hand check of 45 strings found it about 95% right. Results on the prior stream
 
 | Why it failed (`geo_level`) | Posts | Examples |
 |---|---:|---|
-| Blank or not a place (`none`) | 191,545 | "Global", "Zombie planet." |
-| Outside the US (`foreign`) | 66,236 | "Vancouver, British Columbia", "Scotland" |
+| Blank or not a place (`none`) | 191,545 | "Global", or a joke that names no place |
+| Outside the US (`foreign`) | 66,236 | a Canadian city and province; "Scotland" |
 | Only "USA" (`us`) | 14,413 | "United States", "Rural America" |
-| More than one state (`multi`) | 1,286 | "Toledo, OH & Louisville, KY", "DC, NYC, ATL, STL, TEX & CA" |
+| More than one state (`multi`) | 1,286 | two cities in two states; a list of five cities and states |
 
-Successes look like "Camp Hill, PA" → PA (county 42041) and "Florida, USA" → FL. Note that
+Successes look like a town and state code → that state and the town's county, and
+"Florida, USA" → FL. Note that
 this is where the author says they live, not where the post is about.
 </details>
 
@@ -230,7 +233,7 @@ Examples (step 4's wrong reading → dropped):
 - "Bogotá, D.C., Colombia" → read as DC
 - "Tijuana, Baja California" → read as California
 - "Maine-et-Loire" (a French département) → read as Maine
-- "ETATS DE CHOC PREMIERE PARTIE" → read as Delaware, from the capital letters "DE"
+- a French phrase in capitals that is not a place → read as Delaware, from the letters "DE"
 </details>
 
 ### 6. Hub author · *Counting rule*
@@ -252,7 +255,7 @@ so their posts carry no local signal. All their posts are dropped.
 - `hub_author` is the flag.
 
 Examples (prior stream):
-- FluTrackers.com, a volunteer outbreak-tracking site: 2,973 posts, labelled media.
+- A volunteer outbreak-tracking site: 2,973 posts, labelled media.
 - A scientist who tracks H5N1 and relays every report: 7,121 posts, labelled media.
 - A general-public account posting 7,337 times. It's still a hub, because the rule is about
   volume, not type.
@@ -275,9 +278,9 @@ independent local voices. The first copy is kept and the repeats are dropped.
   copy is dropped here.
 
 Examples (largest groups, prior stream):
-- "Russia claims they collected evidence of avian flu pathogens…": 424 posts
-- "Demand mandatory nationwide bulk milk tank testing of the raw…": 189 posts
-- "No animal deserves to be broiled alive. And yet millions of…": 161 posts
+- A claim about a foreign government and avian-flu pathogens: 424 posts
+- A petition calling for nationwide testing of bulk milk: 189 posts
+- An animal-welfare campaign message about how flocks are killed: 161 posts
 </details>
 
 **What's left here is the filtered subset**: 57,921 / 8,128 / 764 / 140 posts, flagged
@@ -309,10 +312,11 @@ fear and jokes are all "no". This step turns tens of thousands of posts into abo
   outside the author's state.
 
 Examples (answered "no"):
-- "With the recent HPAI cases in TX wild and domestic birds it is imperative to protect your
-  poultry by practicing strong biosecurity…" (advice, not an observation)
-- "@user Yeah. Y'all killed all the chickens because 'avian flu' 😂" (opinion and joke)
-- "Gripe aviar en California: Decretan estado de emergencia" (news)
+- A notice that, with recent cases in Texas birds, keepers should practise biosecurity
+  (advice, not an observation)
+- A sarcastic reply blaming the loss of chickens on the response to avian flu (opinion and
+  joke)
+- A Spanish headline that California had declared a state of emergency (news)
 </details>
 
 ### 9. No sick or dead animals · *LLM decision*
@@ -328,12 +332,12 @@ infection among animals the author saw or owns? Precautions alone don't count.
   test.
 
 Examples (local, but answered "no"):
-- "The aviary was closed because of avian flu but I caught a peek at the baby shorebird floating
-  around with parents…" (CA, a closure the author saw)
-- "We are now accepting ALL bird species! … As avian influenza cases have dropped we still
-  quarantine birds with strict biosecurity." (VA, a rehab centre's policy)
-- "…chez moi les Loiseau dont confinés pour ne pas disseminer leurs miasmes." (FL, birds kept
-  indoors; the only French local observation; spelling as posted)
+- A visitor found an aviary closed because of avian flu and saw a chick with its parents
+  anyway (CA, a closure the author saw)
+- A wildlife centre announced it was accepting all bird species again, with quarantine still
+  in place (VA, a rehab centre's policy)
+- A French-language post saying the author's birds were being kept indoors (FL; the only
+  French local observation)
 </details>
 
 ### 10–14. The exclusion screen · *LLM decision*
@@ -355,44 +359,41 @@ to that state (`event_state`; 15 prior posts, 3 en_test). That is the only point
 changes a location.
 
 **What this screen does not remove:** Secondhand means relayed *from outside the author's
-state*. A local news headline from the author's own state, such as "Dead geese found in pond
-at Mount Pleasant park test positive for bird flu", is kept and counts as a sighting.
+state*. A local news headline from the author's own state, such as one reporting that dead
+geese in a named town park tested positive, is kept and counts as a sighting.
 
 **10. Retrospective**, the event was more than about 30 days before the post:
-- "In August while visiting the Patuxent Refuge i found a heron prostrate on a bank…" (posted
-  in November)
-- "The last time the avian flu came through the big farms got completely wiped out and I lost
-  only 1 out of 12."
+- An account of finding a sick heron at a wildlife refuge in August (posted in November)
+- A keeper recalling that in an earlier wave the large farms lost everything and they lost
+  one bird of twelve
 
 **11. Outside the US:**
-- "Perfect weather for an afternoon at Minsmere… Sad to see so many dead birds. Victims of
-  avian flu I assume." (Minsmere is in England; the author's profile says Virginia)
-- "The beaches south of Lima were absolutely littered with dead birds when I was there…"
-  (author in Kansas)
+- A visit to a nature reserve where the author saw many dead birds and assumed avian flu
+  (the reserve is in England; the author's profile says Virginia)
+- A traveller's account of beaches in Peru covered in dead birds (author in Kansas)
 
 **12. Not HPAI:**
-- "Its not h5n1 but we do have a bird flu killing chickens here in southern MI."
-- "However both WNV & HPAI tests came back negative & within a week this bird was much
-  improved with supportive care." (VA)
+- A post saying a different bird disease, not H5N1, was killing chickens in southern
+  Michigan
+- A rehabilitator reporting that a sick bird tested negative for HPAI and recovered (VA)
 
 **13. Secondhand:**
-- "Veterinary daughter in SW US knew of 5 local cats that died of #BirdFlu…" (author in Iowa)
-- "So sad to share the news that Emmanuel Todd Lopez's farm was hit with Avian Flu and over 90%
-  of the birds have died…" (author in California; the emu's farm is in New York)
+- A parent relaying that a daughter, a vet in another region, knew of five cats that died
+  (author in Iowa)
+- A post sharing news that a well-known farm lost most of its birds (author in California;
+  the farm is in another state)
 
 **14. Not credible:**
-- "Prolly same reason dead dove on the drive way I want to get tested for avian flu but
-  prolly just psyops trying freak me out" (AZ)
-- "The amish in my area said they have been forcing them to vaccinate their cattle… Now they
-  are dying."
+- A post about a dead dove on a driveway that the author puts down to a psychological
+  operation (AZ)
+- A claim, attributed to neighbours, that forced vaccination was killing cattle
 
 **Kept**, for comparison:
-- "A friend of mine owns a bunch of chickens. Avian flu got them and he had to slaughter all of
-  them." (IL)
-- "Two weeks ago, we lost 5 wild Muscovy ducks who hung out in our front yard to avian flu…"
+- A post that a friend's chickens caught avian flu and all had to be killed (IL)
+- A household that lost five wild ducks from its front yard to avian flu two weeks earlier
   (FL)
-- "Gripe aviar? Por aquí (New York) hay mucha muerte de aves acuáticas y de águilas calvas."
-  (NY, the only Spanish sighting)
+- A Spanish-language post reporting many deaths of water birds and eagles in the author's
+  area (NY, the only Spanish sighting)
 </details>
 
 ### 15. Same state-week · *Counting rule*
@@ -410,10 +411,8 @@ week, keeping the earliest post.
 - 38 prior posts and 11 en_test posts shared a state-week with an earlier one.
 
 Example (AZ, both posted 2023-11-04, the second dropped):
-- "Reid Park Zoo has received positive avian influenza test results for three of the birds in
-  its care…"
-- "'Our animal care and veterinary team was able to enact safety measures as soon as avian flu
-  was suspected to keep the other birds in our care safe…'"
+- A zoo's announcement that three of its birds had tested positive.
+- A second post the same day quoting the zoo's staff on the measures taken.
 </details>
 
 **What's left is the Sighting rows**: 180 / 62 / 1 / 0, flagged `use_sightings`.
