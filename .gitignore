@@ -16,6 +16,9 @@ raw/
 # --- Reference materials (large, external, some copyrighted) ---
 Claude_Reference/
 
+# --- Repository for notes and other randome files
+Probably_Junk/
+
 # --- Python ---
 __pycache__/
 *.py[cod]
@@ -51,3 +54,9 @@ Visual Studio/
 CLAUDE.md
 
 # NOTE: uv.lock IS committed for reproducibility — do not add it here.
+
+# Personal notes (not committed)
+Notes *.txt
+
+# Cold-start note for the next session: working state, not a deliverable.
+HANDOFF.md
