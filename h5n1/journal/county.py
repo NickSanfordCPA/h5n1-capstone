@@ -148,7 +148,7 @@ def rollup() -> None:
         last = pd.read_sql(text("SELECT max(day) d FROM fact_h5n1_outbreak"), cn, parse_dates=["d"]).d[0]
     settings = {"searched": M.chosen_params("county"), "waree": M.WAREE}
     runs = [("detected", "searched"), ("detected", "waree"), ("coll", "searched")]
-    scores, rel, rolled = [], [], []
+    scores, rel, rolled, county = [], [], [], []
     for wild, sname in runs:
         df = sample(wild)
         cols = columns(df)
@@ -162,13 +162,17 @@ def rollup() -> None:
             p = ps.mean(axis=0)
             rel.append(M.reliability(y[test], p).assign(**base))
             pc = df.loc[test, ["state", "day"]].assign(p=p)
-            r = (1 - (1 - pc.p).groupby([pc.state, pc.day]).prod()).rename("rollup").reset_index()
+            county.append(df.loc[test, ["state", "fips", "day"]].assign(
+                p=p, y=y[test].astype("int8"), wild=wild, setting=sname, k=k))
+            r =(1 - (1 - pc.p).groupby([pc.state, pc.day]).prod()).rename("rollup").reset_index()
             rolled.append(r.assign(wild=wild, setting=sname, k=k))
             print(f"{wild} {sname} k={k}: county PR-AUC {scores[-1]['pr_auc']:.4f}, {len(r)} state-weeks", flush=True)
     pd.DataFrame(scores).to_csv(M.OUT / "county_scores.csv", index=False)
     pd.concat(rel).to_csv(M.OUT / "county_reliability.csv", index=False)
     ru = pd.concat(rolled)
     ru.to_csv(M.OUT / "county_rollup_preds.csv", index=False)
+    # one row per county-Sunday, run and horizon: the mean of the five seeds, with the outcome
+    pd.concat(county).to_parquet(M.OUT / "county_preds.parquet", index=False)
 
     params = M.chosen_params("state")
     sw = M.load_state_week("detected")
