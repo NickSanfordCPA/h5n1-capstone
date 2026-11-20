@@ -324,11 +324,11 @@ def _city(cd: dict, state: str, name: str):
 
 if __name__ == "__main__":
     tests = [
-        "Bird flu confirmed in a backyard flock in Weld County, Colorado.",
+        "Bird flu found in a small flock in Weld County, Colorado.",
         "Dead geese found at Lake Harriet in Minneapolis test positive for avian flu",
         "WASHINGTON (AP) — The White House said bird flu funding ...",
         "Avian flu found in Washington state dairy cattle",
-        "Bird flu has been confirmed in mammals inhabiting South Georgia.",
+        "Seals on South Georgia have bird flu.",
         "HPAI detected in Maricopa County",
         "La gripe aviar llega a Nuevo México y Texas",
         "Gripe aviar en Tijuana, Baja California",
@@ -340,7 +340,7 @@ if __name__ == "__main__":
         "A second case in Kansas City, Kansas",
         "MICHIGAN: bird flu found in dairy herd",
         "the nevada of the sierra",
-        "BAJA CALIFORNIA SE MANTIENE LIBRE DE GRIPE AVIAR, a diferencia de California",
+        "BAJA CALIFORNIA SIGUE SIN GRIPE AVIAR, a diferencia de California",
         "\U0001d5d5\U0001d5dc\U0001d5e5\U0001d5d7 \U0001d5d9\U0001d5df\U0001d5e8 in \U0001d5e0\U0001d5f6\U0001d5fb\U0001d5fb\U0001d5f2\U0001d600\U0001d5fc\U0001d601\U0001d5ee",
         "Dead swans at a pond in Madison, Wis.",
     ]

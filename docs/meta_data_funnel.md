@@ -124,7 +124,7 @@ Steps 10–14 include 32 reviewed corrections, and step 8 includes 11 more (see 
 
 ## Step by step
 
-Examples are quoted with handles replaced by `@user` and links by `[link]`, and are shortened.
+Examples are described, not quoted: no post text is reproduced and no account is named.
 
 ### 2. Outside date window · *Metadata rule*
 
@@ -138,9 +138,9 @@ post. A post is a reshare if `content_type` is `reshare` or it has a `shared_pos
 dropped, as X dropped quote posts.
 
 Examples:
-- "VDACS is proud to be part of this task force. As broilers and turkeys represent two out of the
-  top three Virginia commodities…"
-- "La primera víctima en Estados Unidos en morir de gripe aviar fue un hombre de Luisiana…"
+- A state agriculture department resharing news of a poultry task force, with its own
+  comment on the industry's size.
+- A Spanish-language reshare about the first US death from avian flu, in Louisiana.
 
 ### 6. Hub author · *Counting rule*
 
@@ -172,11 +172,11 @@ Largest hubs in the geocoded set:
 
 | Author | Account type | Geocoded posts |
 |---|---|---:|
-| COEmergency | general_public | 316 |
-| Successful Farming | media_aggregator | 174 |
-| CIDRAP | media_aggregator | 165 |
-| RFD-TV | media_aggregator | 144 |
-| Avicultura.mx | media_aggregator | 117 |
+| A state emergency-management account | general_public | 316 |
+| A farming magazine | media_aggregator | 174 |
+| A university infectious-disease news service | media_aggregator | 165 |
+| A rural television network | media_aggregator | 144 |
+| A Spanish-language poultry trade site | media_aggregator | 117 |
 </details>
 
 ### 7. Copypasta repeat · *Text fingerprint*
@@ -191,9 +191,9 @@ Groups form over all of a stream's posts. Max had already removed most copypasta
 own rule, so this step removes little.
 
 Largest groups:
-- "bird flu prompts slaughter of m chickens in nebraska": 18 posts
-- "dead florida dolphin was infected with highly pathogenic bird flu": 11 posts
-- "bird flu virus likely mutated within a louisiana patient cdc says": 10 posts
+- A headline about a large cull of chickens in Nebraska: 18 posts
+- A headline about a dead dolphin in Florida found to be infected: 11 posts
+- A headline about the virus mutating in a Louisiana patient: 10 posts
 
 **What's left is the filtered subset: 15,400 + 3,970 = 19,370 posts**, flagged `use_sentiment`.
 This is the sentiment input:
@@ -215,8 +215,8 @@ The first wave of 13 batches used X's Appendix B unchanged. It went wrong in two
 - **Readers disagreed.** Most Meta authors are TV stations, newspapers and agencies. Readers split
   on whether an agency announcement about a named county counts as a local observation, and the
   sick-or-dead rate per batch ranged from 7% to 24%.
-- **The outcome leaked in.** A typical "sighting" was "The Arizona Department of Health Services
-  says poultry in a backyard flock located in Maricopa County has tested positive". That is a
+- **The outcome leaked in.** A typical "sighting" was a state health department's statement
+  that a backyard flock in a named county had tested positive. That is a
   USDA-confirmed poultry detection: the outcome we are predicting.
 
 Nick's rule (2026-11-11), which became guide v2:
@@ -231,15 +231,12 @@ labels are archived in `data/Meta_derived/labels/wave1_xguide/`.
 </details>
 
 2,843 posts are poultry announcements; they are counted under this step. Examples:
-- "A commercial broiler breeder chicken flock in Noxubee County has tested positive for highly
-  pathogenic avian influenza."
-- "Un brote de gripe aviar afecta una granja comercial en Georgia por primera vez"
+- A statement that a commercial breeder flock in a named Mississippi county tested positive.
+- A Spanish headline about the first outbreak on a commercial farm in Georgia.
 
 Other examples answered "no":
-- "Federal officials are considering if and when to deploy 4.8 million doses of bird flu vaccine…"
-  (policy)
-- "Colorado's health department has confirmed four cases of bird flu in Colorado poultry workers…"
-  (human cases)
+- A report that federal officials were weighing when to use a stock of vaccine (policy)
+- A report of four confirmed cases in Colorado poultry workers (human cases)
 
 ### 9. No sick or dead animals · *LLM decision*
 
@@ -247,9 +244,8 @@ The second question is stricter: does the post describe sick or dead animals, or
 among the animals observed? Precautions alone don't count.
 
 Examples (local, but answered "no"):
-- "…the tropical [exhibit]… With the discovery of avian bird flu in Arkansas… the health and
-  safety of our staff, visitors and animals are our top concerns" (a zoo closing an aviary)
-- "The San Diego Humane Society has taken precautions against bird flu…"
+- A zoo announcing that it was closing an aviary after avian flu was found in its state
+- An animal-welfare organisation describing the precautions it had taken
 
 ### 10–14. The exclusion screen · *LLM decision*
 
@@ -271,20 +267,21 @@ date, never the outbreak data.
   the post's own state. Where it isn't, it is moved rather than dropped.
 
 **10. Retrospective:**
-- "It's MEDICAL MONDAY… WildCareOklahoma released a bald eagle admitted on December 1, 2023"
-  (posted February 2024)
-- "A bottlenose dolphin found dead in Florida's Dixie County was infected…" (a study of an
+- A wildlife centre's post about releasing an eagle admitted two months earlier (posted
+  February 2024)
+- A report that a dolphin found dead in a Florida county had been infected (a study of an
   earlier death)
 
 **11. Outside the US.** Most Spanish removals are here: Latin American and Antarctic die-offs that
 the geocoder read as US states.
-- "La gripe aviar produce desolador paisaje en Península de Valdés…" (Argentina, read as CA)
-- "Bird flu has been confirmed in mammals inhabiting South Georgia." (the island, read as GA)
+- A Spanish-language report of a die-off on a peninsula in Argentina (read as CA)
+- A report of infected mammals on the island of South Georgia (read as GA)
 
 **12. Not HPAI:**
-- "The West Virginia Department of Transportation found over 200 dead crows on US 19 North…"
-  (another cause)
-- "NEGATIVAS A GRIPE AVIAR LAS MUESTRAS TOMADAS DE AVES MUERTAS EN JUANA DÍAZ" (tested negative)
+- A state transport department's report of more than 200 dead crows on a highway (another
+  cause)
+- A Spanish headline that samples from dead birds in a Puerto Rico town were negative (tested
+  negative)
 
 **14. Not credible:** two near-identical first-person posts about "falsified negatives" at an egg
 facility, and an apocalyptic post.
@@ -297,7 +294,7 @@ Readers' files are left as written. Overrides live in `data/Meta_derived/labels/
 
 | Correction | Posts | Why |
 |---|---:|---|
-| Poultry announcement leaked through | 11 | A single reader re-read all 209 kept posts that use poultry words and found 11 flock announcements, e.g. "Hickman's Family Farms says bird flu has killed 95 percent of its Arizona flock" |
+| Poultry announcement leaked through | 11 | A single reader re-read all 209 kept posts that use poultry words and found 11 flock announcements, e.g. an egg producer saying it had lost nearly all of its Arizona flock |
 | Retrospective | 29 | April 2024 echoes, mostly Spanish, of a study of New York City park birds sampled in 2022–23 |
 | Retrospective | 2 | Reposts of the December 2024 Washington big-cat sanctuary deaths |
 | Retrospective | 1 | A June 2025 post about flock detections the previous December |
@@ -311,8 +308,8 @@ state is `event_state`. 881 posts shared a state-week with an earlier one. That 
 X's 49, because the same news story spreads across many Pages.
 
 **What's left is the Sighting rows: 498 + 43 = 541**, flagged `use_sightings`. Examples:
-- "Avian flu leads to increased bird deaths in Northwest Indiana, statewide [link]" (IN)
-- "SAFETY ALERT: Don't touch or approach wild birds, especially if they seem sick or dead!…" (PA)
+- A local news post that bird deaths were rising in one part of Indiana and statewide (IN)
+- A safety alert telling residents not to touch sick or dead wild birds (PA)
 
 ## The `meta_post_funnel` table
 
