@@ -568,7 +568,7 @@ question was answered by a different method than the one proposed.
 | Score the 2025-26 X data once, under a specification approved first (October 31) | Done; both primaries null | Part 7. Later analyses of that period are exploratory and are labelled so. |
 | GDELT tone: five registered measures, two stages (September 27) | Done; null | Stage 1 null; stage 2 not run, as registered (Part 6). |
 | Journal protocol committed before any outcome-linked result (November 17) | Done | Commit `ef852d2`. Departures from it are listed in `PROGRESS.md`. |
-| Human validation: three coders, 400 posts, blind | In progress | One of three workbooks is complete. |
+| Human validation: three coders, 400 posts, blind | Done (2026-11-21) | All three coded all 400 posts. Coders agreed with each other moderately (Krippendorff α 0.68 for sightings); the model agreed with their majority at κ 0.79 (0.65 to 0.91). Manuscript Table 4. |
 
 ### Summary
 

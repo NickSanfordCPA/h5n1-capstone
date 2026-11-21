@@ -78,7 +78,12 @@ The paper describes itself as exploratory.
 
 ### Major comment M2
 
-**The labels have no human validation yet, and all come from one vendor's models.** Status: Open.
+**The labels have no human validation yet, and all come from one vendor's models.** Status:
+Partly addressed 2026-11-21. Three authors coded 400 posts blind; the model's sighting label
+agrees with their majority (weighted κ 0.79, 95% CI 0.65 to 0.91; Results, Table 4). Still
+open: the coders agree with each other only moderately (Krippendorff α 0.47 to 0.69, below
+the 0.80 a reviewer will expect), the coders are authors, and the single-vendor point stands.
+The text below is the comment as first written.
 
 - Location: Methods, "Labelling by a Large Language Model" and "Human Validation"; Results,
   "Human Validation"; Abstract, Results.

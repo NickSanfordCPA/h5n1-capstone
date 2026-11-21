@@ -12,7 +12,7 @@ Brief: `docs/journal_rebuild/FABLE_INSTRUCTIONS.md`. Updated after every complet
 | 6.4 Post pipeline | Steps 1–8 **done** for both platforms (`journal.post`). Guide J1 piloted. Full labelling waits for gate 1 |
 | 6.5 Sentiment | **Done.** All 66,590 reader-set posts scored and loaded |
 | **Gate 1: `PROTOCOL.md`** | **Committed.** |
-| 6.6–6.10 | **Done** (2026-11-18). Human validation: packets out, agreement pending the coded files |
+| 6.6–6.10 | **Done** (2026-11-18). Human validation: done 2026-11-21, see the last section |
 | Paper | **Draft 1 written**, self-reviewed; open items at the top of `paper/manuscript.md` and in `paper/self_review.md`. All X numbers provisional until Max's re-pull |
 
 Protocol commit hash: `ef852d252226fd905b1a40a798dc6cc40956cca1` (committed 2026-11-17 at Nick's instruction; guide J1 frozen at `a03dcaf`)
@@ -1090,3 +1090,53 @@ scope is unchanged at 319 posts.
 **Not done.** The older tables in this file still show earlier X numbers. `PROTOCOL.md` is
 unchanged. The Spanish and French pulls were not gap-checked by query group. No result has
 been independently recomputed.
+
+## Update, 2026-11-21: human validation (gate 2)
+
+All three coding workbooks are complete (400 posts, 345 authors each). The first run aborted:
+Max had 5 posts with no codes, Waree had 6 posts with one or more blank fields and 1 blank
+author. Both filled them the same day; nothing was imputed and `kappa.py` was not changed.
+Command: `uv run --extra journal python -m h5n1.journal.kappa analyse`. Outputs (git-ignored):
+`coding/agreement_between_coders.csv`, `coding/agreement_with_readers.csv`.
+
+**Among the coders (all 400 posts; author rows by author).**
+
+| Field | Krippendorff α | All three agree | Pairwise κ (Nick-Max, Nick-Waree, Max-Waree) |
+|---|---:|---:|---|
+| relevant | 0.473 | 84.0% | 0.474, 0.572, 0.361 |
+| sick_dead_local | 0.692 | 80.5% | 0.728, 0.666, 0.680 |
+| content_class | 0.658 | 67.0% | 0.605, 0.631, 0.750 |
+| state_correct | 0.570 | 90.5% | 0.613, 0.517, 0.578 |
+| sighting (derived) | 0.682 | 83.2% | 0.728, 0.680, 0.637 |
+| author_type, X (156) | 0.838 | 87.8% | 0.847, 0.807, 0.859 |
+| author_type, Facebook (189) | 0.355 | 74.6% | 0.288, 0.340, 0.613 |
+
+**Coder majority against the reader labels.** Primary scope: 319 posts still in the reader
+set with unchanged wording and state (of 326 retained; 7 re-read; 74 no longer in the set),
+weighted to the current reader set.
+
+| Field | n | Agreement | Weighted κ (95% CI) | Sensitivity (95% CI) | PPV (95% CI) |
+|---|---:|---:|---|---|---|
+| relevant | 319 | 93.0% | 0.666 (0.472, 0.820) | 0.984 (0.962, 1.000) | 0.938 (0.896, 0.970) |
+| content_class | 311 | 85.4% | 0.738 (0.645, 0.829) | | |
+| sick_dead_local | 319 | 97.1% | 0.899 (0.803, 0.967) | 0.899 (0.776, 0.995) | 0.934 (0.874, 0.978) |
+| sighting | 319 | 97.4% | 0.790 (0.654, 0.907) | 0.789 (0.602, 0.978) | 0.819 (0.706, 0.912) |
+
+Check on all 400 posts with the labels at the draw, unweighted: sighting κ 0.732 (0.660,
+0.802), sensitivity 0.835, PPV 0.760; content_class κ 0.676; relevant κ 0.577. The 74 posts
+no longer in the reader set agree less (sighting κ 0.615, sensitivity 0.640).
+
+Geocoded state judged correct: 91.2% (87.8%, 94.8%) of the primary scope, weighted; 99.8% of
+the 261 posts the readers placed in one US state. Author type, majority against the label
+used: X 97.1% of 103 authors (κ 0.941); Facebook, against the Page or profile field, 93.1% of
+189 (κ 0.410).
+
+**Reading.** The readers agree with the coder majority at least as well as the coders agree
+with each other. Coder agreement is moderate and below 0.80 on every post field. Nick decided
+on 2026-11-21 that no reconciliation round will be held; the independent codes are final. The
+guide was not revised. Facebook author type cannot be
+coded reliably from a name and the Page or profile flag.
+
+**Documents updated.** `paper/manuscript.md` (abstract, Methods and Results "Human
+Validation" with Table 4, Limitations, open item 7), `paper/self_review.md` (M2),
+`paper/checklists.md`, `supplement.md` (ledger row). No `.docx` was rebuilt.
