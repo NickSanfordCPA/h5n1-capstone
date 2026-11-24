@@ -18,8 +18,13 @@ OPEN ITEMS FOR NICK
 5. Deadline: unknown to the drafter.
 6. Waree's sign-off on the re-dated baseline (wild-bird features dated by Date Detected, and
    the searched forest in place of her fixed settings as the primary).
-7. Human validation: the three coding workbooks are out. Section "Human validation" and the
-   abstract carry [PENDING] markers.
+7. Human validation: DONE 2026-11-21. All three workbooks complete (Max and Waree filled 12
+   blank items the same day, after the first run aborted on them). Numbers are from
+   coding/agreement_between_coders.csv and coding/agreement_with_readers.csv (kappa.py
+   analyse). Coder agreement is moderate (alpha 0.47 to 0.69), below the 0.80 usually asked
+   for; Table 4 and the Limitations paragraph say so plainly. Nick decided on 2026-11-21 that
+   there will be NO reconciliation round among the coders; the independent codes are final
+   and Methods says so.
 8. X re-pull: DONE 2026-11-19. The English X posts of 2022-06..2024-12 now come from Max's
    table x_post_unique_ss (same collector and query groups as 2025+). Every Facebook number
    reproduced exactly. X test-period Track B and mechanism numbers did not change (the 2025+
@@ -52,7 +57,7 @@ Build: pandoc manuscript.md -o manuscript.docx --resource-path=. (run in this fo
 
 **Methods:** This exploratory study used 301,044 Facebook posts and 310,202 X posts from June 2022 to July 2026, processed by one pipeline. Posts were located by the US state named in their text. Every candidate post (n=45,712) was read twice by a large language model under a fixed guide, with a third reading where the two disagreed. The baseline was a state-week random forest on 37 features. Development data were 2022-2024 and test data were 2025-2026. Track A added post volume and sentiment to the baseline and compared the area under the precision-recall curve (PR-AUC) for new outbreaks in the next 14 days. Track B took posts reporting sick or dead animals at a named local place ("sightings") and compared outbreaks observed after them with those the baseline expected, as an observed-to-expected (O/E) ratio relative to state-weeks without a sighting. Mechanism checks tested whether a signal reflected news of outbreaks awaiting confirmation.
 
-**Results:** Adding posts did not improve the forecast on either platform. The change in PR-AUC was −0.000 (95% CI −0.013 to 0.011) for Facebook and 0.000 (95% CI −0.011 to 0.011) for X. Sightings were followed by more outbreaks than expected on Facebook (290 sighted state-weeks; O/E ratio 1.21, 95% CI 1.06 to 1.37), and less clearly on X (424; 1.15, 95% CI 0.99 to 1.32). The two platforms did not differ (ratio of ratios 1.05, 95% CI 0.88 to 1.25). The excess did not shrink when the first 10 days after the post were excluded (ratios 1.34 and 1.34 after adjustment for the level of expected risk) or when news volume was added to the baseline. It was carried by relayed reports of wildlife die-offs; first-hand accounts were too few to assess. Human validation of the labels is in progress [PENDING].
+**Results:** Adding posts did not improve the forecast on either platform. The change in PR-AUC was −0.000 (95% CI −0.013 to 0.011) for Facebook and 0.000 (95% CI −0.011 to 0.011) for X. Sightings were followed by more outbreaks than expected on Facebook (290 sighted state-weeks; O/E ratio 1.21, 95% CI 1.06 to 1.37), and less clearly on X (424; 1.15, 95% CI 0.99 to 1.32). The two platforms did not differ (ratio of ratios 1.05, 95% CI 0.88 to 1.25). The excess did not shrink when the first 10 days after the post were excluded (ratios 1.34 and 1.34 after adjustment for the level of expected risk) or when news volume was added to the baseline. It was carried by relayed reports of wildlife die-offs; first-hand accounts were too few to assess. In a blind sample coded by 3 of the authors, the model's sighting label agreed with the coders' majority (κ=0.79, 95% CI 0.65 to 0.91); agreement among the coders themselves was lower (Krippendorff α=0.68).
 
 **Conclusions:** In this exploratory analysis, the volume and tone of social media posts added nothing to a baseline forecast of poultry outbreaks. Posts relaying local wildlife die-offs marked state-weeks with about 20% more outbreaks than the baseline expected, which points to wildlife mortality reports, not to public sentiment, as the useful content. The finding needs confirmation on data not seen during the analysis.
 
@@ -162,7 +167,9 @@ All CIs are 95% percentile intervals from a bootstrap that resamples whole weeks
 
 ### Human Validation
 
-A stratified random sample of 400 labelled posts and their 345 authors is being coded independently by 3 of the authors, blind to the model's labels, to each other and to outcomes. The sample oversamples sightings, each content class, and posts on which the two model readings disagreed, with sampling weights recorded so that agreement can be weighted to the labelled set. We will report Krippendorff α and pairwise Cohen κ among coders, and κ, sensitivity and positive predictive value of the model's labels against the coders' majority. [PENDING: coding in progress.]
+A stratified random sample of 400 labelled posts and their 345 authors was coded independently by 3 of the authors, blind to the model's labels, to each other and to outcomes. Each coder saw what the model saw (date, language and the first 1,500 characters) and recorded whether the post was about avian influenza, whether it described sick or dead animals at a named local place, its content class, and whether the state assigned by our text rules was correct. Authors were coded as organizations or individuals on a separate sheet without their posts. The sample oversampled sightings, each content class, and posts on which the two model readings disagreed, with sampling weights recorded so that agreement could be weighted to the labelled set. A coder's sighting was a post with sick or dead animals at a local place that the coder classed as a wildlife report or a first-hand account; the coders did not apply the model's further exclusions, so the two definitions are close but not identical.
+
+We report Krippendorff α and pairwise Cohen κ among the coders on all 400 posts, and κ, sensitivity and positive predictive value of the model's labels against the value that at least 2 of the 3 coders gave. The coders did not discuss or reconcile their disagreements; all values are from the independent codes. The sample was drawn before the English X posts of 2022-2024 were re-collected. Of the 400 posts, 74 (all English X) were not in the re-collected data and 7 returned with different wording; the primary comparison with the model uses the remaining 319, weighted to the labelled set as analyzed, and comparisons on all 400 posts with the labels they had when sampled are given as a check. Intervals are from a bootstrap that resamples posts within sampling cells (2,000 replicates).
 
 ### Exploratory Status
 
@@ -292,7 +299,22 @@ The X result depended on a few accounts. Removing the most active 1% of authors 
 
 ### Human Validation
 
-[PENDING: agreement among the 3 coders and between their majority and the model's labels will be reported here.]
+The 3 coders agreed with each other only moderately (Table 4). Krippendorff α was 0.68 for whether a post was a sighting, 0.69 for sick or dead animals at a local place, 0.66 for content class and 0.47 for relevance. The low value for relevance reflects a very uneven split: the coders gave the same answer on 84% of posts, and nearly all posts were relevant. For author type, α was 0.84 for X accounts and 0.36 for Facebook authors.
+
+The model's labels agreed with the coders' majority at least as well as the coders agreed with each other. For sightings, weighted κ was 0.79 (95% CI 0.65 to 0.91). Of the posts the coders called sightings, the model labelled 79% as sightings (sensitivity; 95% CI 60% to 98%), and of the posts the model labelled as sightings, the coders agreed on 82% (positive predictive value; 95% CI 71% to 91%). On all 400 coded posts with the labels they had when sampled, unweighted, the corresponding values were κ=0.73 (95% CI 0.66 to 0.80), sensitivity 84% and positive predictive value 76%.
+
+**Table 4.** Human validation: agreement among 3 coders (400 posts), and of the model's labels with the coders' majority (319 posts in the labelled set as analyzed, weighted).
+
+| Label | Krippendorff α, coders | Pairwise κ, coders (range) | Agreement, model vs majority | κ, model vs majority (95% CI) | Sensitivity (95% CI) | Positive predictive value (95% CI) |
+|---|---:|---|---:|---|---|---|
+| About avian influenza | 0.47 | 0.36 to 0.57 | 93.0% | 0.67 (0.47 to 0.82) | 0.98 (0.96 to 1.00) | 0.94 (0.90 to 0.97) |
+| Sick or dead animals at a local place | 0.69 | 0.67 to 0.73 | 97.1% | 0.90 (0.80 to 0.97) | 0.90 (0.78 to 1.00) | 0.93 (0.87 to 0.98) |
+| Content class (4 classes) | 0.66 | 0.61 to 0.75 | 85.4% | 0.74 (0.65 to 0.83) | | |
+| Sighting | 0.68 | 0.64 to 0.73 | 97.4% | 0.79 (0.65 to 0.91) | 0.79 (0.60 to 0.98) | 0.82 (0.71 to 0.91) |
+
+For 8 posts the 3 coders each chose a different content class; these have no majority and are left out of that row. Sensitivity: of the posts the majority coded yes, the weighted share the model labelled yes. Positive predictive value: of the posts the model labelled yes, the weighted share the majority coded yes.
+
+The coders judged the state assigned by our text rules to be correct for 91.2% of posts in the labelled set (95% CI 87.8% to 94.8%), and for 99.8% of the posts that the model placed in one US state, which are the posts the analyses use. For X accounts, the coders' majority matched the model's account type for 97.1% of 103 accounts (κ=0.94). For Facebook authors, the majority matched the platform's Page or profile field for 93.1% of 189 (κ=0.41).
 
 ## Discussion
 
@@ -332,7 +354,7 @@ Location came from place names in post text, not from where authors were. Posts 
 
 The outcome is dated by confirmed diagnosis because no earlier date exists. We tested for an echo of unconfirmed outbreaks indirectly, through exclusion windows, and the news-based comparison we planned proved uninformative.
 
-Labels came from a language model. Internal agreement was high, but agreement with human coders is pending, and the author-type guide was piloted on one batch only.
+Labels came from a language model. Its agreement with the majority of 3 human coders was good for sightings (κ=0.79), but the coders agreed with each other only moderately (α 0.66 to 0.69 for the labels that define a sighting), so the reference standard is itself uncertain, and the coders were authors of this study. The model missed about 1 in 5 posts that the coders called sightings, with a wide interval, and the validation of English X sightings rests on few posts because part of the sample left the data set when X was re-collected. Organization and individual could not be coded reliably for Facebook authors (α=0.36), so the news-like and personal split on Facebook rests on the platform's Page field alone. The author-type guide was piloted on one batch only.
 
 The English X posts for 2022-2024 were collected in a later run than the rest, and about 7% of all English query-days had to be collected a second time after the first attempt returned nothing or stopped early; a failure that left a plausible number of posts would not have been detected. X sightings depended heavily on 3 relay accounts.
 

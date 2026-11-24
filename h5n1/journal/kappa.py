@@ -3,6 +3,7 @@
     uv run --extra journal python -m h5n1.journal.kappa sample     # design and draw, once
     uv run --extra journal python -m h5n1.journal.kappa packets    # one workbook per coder
     uv run --extra journal python -m h5n1.journal.kappa retained   # the sample against today's reader set
+    uv run --extra journal python -m h5n1.journal.kappa key        # item -> post id -> journal.coding_key
     uv run --extra journal python -m h5n1.journal.kappa analyse [--dir DIR]
 
 sample. 400 posts from the labelled reader set, stratified by platform x language x stratum.
@@ -45,7 +46,7 @@ import numpy as np
 import pandas as pd
 from sqlalchemy import text
 
-from h5n1.journal.localdb import DATA_DIR, local_engine
+from h5n1.journal.localdb import DATA_DIR, assert_local, local_engine
 
 ROOT = Path(__file__).resolve().parents[2]
 CODING = ROOT / "docs" / "journal_rebuild" / "coding"
@@ -488,12 +489,37 @@ def analyse(folder: Path) -> None:
     print(pd.DataFrame(out).round(3).to_string(index=False))
 
 
+def key() -> None:
+    """journal.coding_key: item -> (platform, post_id) and author_item, from the private sample
+    key. Identifiers only: no text, author name, handle or bio, and no reader labels (the coders'
+    blind items stay blind in the repo; this table lives only in the database). Join the coders'
+    codes_<coder>_posts.csv on item, and journal.post_read / post_label on (platform, post_id)."""
+    k = pd.read_parquet(PRIVATE / "sample_key.parquet")
+    k = k[["item", "platform", "post_id", "author_item"]].assign(post_id=lambda d: d.post_id.astype(str))
+    k = k.sort_values("item").reset_index(drop=True)
+    assert len(k) == sum(ALLOCATION.values()) and k.item.is_unique
+    assert not k.duplicated(["platform", "post_id"]).any()
+    eng = local_engine()
+    assert_local(eng)
+    with eng.begin() as cn:
+        cn.execute(text("DROP TABLE IF EXISTS journal.coding_key"))
+        k.to_sql("coding_key", cn, schema="journal", index=False)
+        cn.execute(text("ALTER TABLE journal.coding_key ADD PRIMARY KEY (item)"))
+        cn.execute(text("CREATE UNIQUE INDEX coding_key_post ON journal.coding_key (platform, post_id)"))
+        cn.execute(text(
+            "COMMENT ON TABLE journal.coding_key IS 'Journal rebuild human validation: coding item "
+            "(P001-P400) -> platform, post_id and author_item (A001...). Identifiers only, from "
+            "data/journal/coding/sample_key.parquet. Some X posts are no longer in the reader set "
+            "after the 2026-11-19 re-pull. Built by kappa.py key.'"))
+    print(f"{len(k)} items -> journal.coding_key ({k.author_item.nunique()} authors)")
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("what", choices=["sample", "packets", "retained", "analyse"])
+    ap.add_argument("what", choices=["sample", "packets", "retained", "key", "analyse"])
     ap.add_argument("--dir", default=str(CODING))
     a = ap.parse_args()
     if a.what == "analyse":
         analyse(Path(a.dir))
     else:
-        {"sample": sample, "packets": packets, "retained": retained}[a.what]()
+        {"sample": sample, "packets": packets, "retained": retained, "key": key}[a.what]()

@@ -1,6 +1,7 @@
 """The label half of the funnel (steps 9-16, protocol section 6.4), identical for Meta and X.
 
     uv run python -m h5n1.journal.label_funnel merge    # one label row per reader-set post
+    uv run python -m h5n1.journal.label_funnel reads    # both reads + adjudication -> journal.post_read
     uv run python -m h5n1.journal.label_funnel build    # steps 9-16 -> journal.post_funnel
     uv run python -m h5n1.journal.label_funnel report   # docs/journal_rebuild/funnel.md
 
@@ -129,6 +130,127 @@ def merge() -> None:
             "plus wave2 and wave3. Built by label_funnel.py merge.'"))
     print(f"{len(lab):,} posts -> {MERGED} and journal.post_label")
     print(lab.groupby(["platform", "label_source"]).size().unstack().to_string())
+
+
+READ_WAVES = {"wave1": 95, "wave1f": None, "wave1x": None, "wave2": None, "wave3": None}
+ANALYSIS = ["relevant", "content_class", "place_state", "sighting_candidate"]
+
+
+def reads() -> None:
+    """journal.post_read: for every labelled post, both Sonnet reads side by side, the Opus
+    adjudication where there was one, and how it was decided. One row per journal.post_label row.
+
+    Per analysis field (relevant, content_class, place_state, sighting_candidate) `<field>_by`
+    is: `agree` (the reads agreed and nobody changed it), `A` or `B` (the reads differed and the
+    adjudicator took that read's answer), `neither` (the reads differed and the adjudicator gave
+    a third answer), or `overruled` (the reads agreed and the adjudicator changed it anyway).
+    `adj_outcome` sums these per post: not adjudicated / sided with A / sided with B / split
+    (A on some fields, B on others) / overruled (any `neither` or `overruled`).
+    `adj_shown_first` is the read the adjudicator saw as read_1 (the order was shuffled).
+
+    Self-check: the merge rule applied to these rows must reproduce journal.post_label exactly."""
+    lab = pd.read_parquet(MERGED).assign(post_id=lambda d: d["post_id"].astype(str))
+    lab["id"] = lab["platform"].str[0] + lab["post_id"]
+    rows = []
+    for wave, first_superseded in READ_WAVES.items():
+        w = LAB / wave
+        ids = set(lab.loc[lab["wave"] == wave, "id"])
+        ns = sorted(int(f.stem.split("_")[1]) for f in (w / "A").glob("labels_*.csv"))
+        ns = [n for n in ns if first_superseded is None or n < first_superseded]
+        def load(sub, ns=ns, w=w):  # noqa: E306
+            x = pd.concat([pd.read_csv(w / sub / f"labels_{n}.csv", dtype=str,
+                                       keep_default_na=False).assign(batch=n) for n in ns],
+                          ignore_index=True)
+            return x[x["id"].isin(ids)].set_index("id")
+        a, b = load("A"), load("B")
+        if a.index.has_duplicates or b.index.has_duplicates or set(a.index) != ids \
+                or set(b.index) != ids:
+            raise SystemExit(f"{wave}: reads do not cover the labelled posts exactly once")
+        b = b.loc[a.index]
+        adj_n = sorted(int(f.stem.split("_")[1]) for f in (w / "adj").glob("labels_*.csv"))
+        adj = _read_csvs(w / "adj", adj_n).set_index("id")
+        adj = adj[adj.index.isin(ids)]
+        key = pd.read_csv(w / "adj_key.csv", dtype=str).set_index("id")["read_1"]
+        da = derive(a.reset_index()).set_index("id")
+        db = derive(b.reset_index()).set_index("id")
+        dj = derive(adj.reset_index()).set_index("id")
+        out = pd.DataFrame(index=a.index)
+        out["wave"], out["batch"] = wave, a["batch"]
+        for f in FIELDS[1:]:
+            out[f"a_{f}"], out[f"b_{f}"] = a[f], b[f]
+        out["a_sighting_candidate"] = da["sighting_candidate"]
+        out["b_sighting_candidate"] = db["sighting_candidate"]
+        out["adjudicated"] = out.index.isin(adj.index)
+        out["adj_shown_first"] = key.reindex(out.index).where(out["adjudicated"])
+        for f in FIELDS[1:]:
+            out[f"adj_{f}"] = adj[f].reindex(out.index)
+        out["adj_sighting_candidate"] = dj["sighting_candidate"].reindex(out.index)
+        rows.append(out)
+    r = pd.concat(rows)
+
+    by = {}
+    for f in ANALYSIS:
+        av, bv, jv = (r[f"{p}_{f}"].astype(str) for p in ("a", "b", "adj"))
+        differ = av != bv
+        v = pd.Series("agree", index=r.index)
+        j = r["adjudicated"]
+        v[j & differ & (jv == av)] = "A"
+        v[j & differ & (jv == bv)] = "B"
+        v[j & differ & (jv != av) & (jv != bv)] = "neither"
+        v[j & ~differ & (jv != av)] = "overruled"
+        r[f"{f}_by"] = by[f] = v
+    by = pd.DataFrame(by)
+    has = lambda s: by.eq(s).any(axis=1)  # noqa: E731
+    r["adj_outcome"] = "not adjudicated"
+    r.loc[r["adjudicated"] & has("A") & ~has("B"), "adj_outcome"] = "sided with A"
+    r.loc[r["adjudicated"] & has("B") & ~has("A"), "adj_outcome"] = "sided with B"
+    r.loc[r["adjudicated"] & has("A") & has("B"), "adj_outcome"] = "split"
+    r.loc[r["adjudicated"] & (has("neither") | has("overruled")), "adj_outcome"] = "overruled"
+    if (r["adjudicated"] & (r["adj_outcome"] == "not adjudicated")).any():
+        raise SystemExit("an adjudicated post has no outcome")
+
+    # Self-check: rebuild the final label by the merge rule and compare with journal.post_label.
+    fin = r[[f"a_{f}" for f in FIELDS[1:]]].rename(columns=lambda c: c[2:]).copy()
+    j = r["adjudicated"]
+    for f in FIELDS[1:]:
+        fin.loc[j, f] = r.loc[j, f"adj_{f}"]
+    at = r.loc[j, "a_topic"]
+    rel = r.loc[j, "adj_relevant"]
+    t = at.where(~((rel == "yes") & (at == "off_topic")), r.loc[j, "adj_topic"])
+    fin.loc[j, "topic"] = t.where(rel == "yes", "off_topic")
+    want = lab.set_index("id").loc[r.index]
+    if (want["label_source"].eq("adjudicated") != j).any():
+        raise SystemExit("adjudicated flag differs from post_label.label_source")
+    if (want["topic_reads_agree"].astype(bool) != (r["a_topic"] == r["b_topic"])).any():
+        raise SystemExit("topic_reads_agree differs from post_label")
+    bad = (fin[FIELDS[1:]] != want[FIELDS[1:]]).any(axis=1)
+    if bad.any():
+        raise SystemExit(f"{int(bad.sum())} posts: reads + adjudication do not reproduce post_label")
+
+    r = r.reset_index().merge(lab[["id", "platform", "post_id"]], on="id", validate="1:1")
+    cols = (["platform", "post_id", "wave", "batch"]
+            + [f"a_{f}" for f in FIELDS[1:] + ["sighting_candidate"]]
+            + [f"b_{f}" for f in FIELDS[1:] + ["sighting_candidate"]]
+            + ["adjudicated", "adj_shown_first"]
+            + [f"adj_{f}" for f in FIELDS[1:] + ["sighting_candidate"]]
+            + [f"{f}_by" for f in ANALYSIS] + ["adj_outcome"])
+    r = r[cols]
+    eng = local_engine()
+    assert_local(eng)
+    with eng.begin() as cn:
+        cn.execute(text("DROP TABLE IF EXISTS journal.post_read"))
+        r.to_sql("post_read", cn, schema="journal", index=False, chunksize=1000, method="multi")
+        cn.execute(text("ALTER TABLE journal.post_read ADD PRIMARY KEY (platform, post_id)"))
+        cn.execute(text(
+            "COMMENT ON TABLE journal.post_read IS 'Journal rebuild: both Sonnet reads (a_*, b_*) "
+            "and the Opus adjudication (adj_*) for every journal.post_label post; <field>_by and "
+            "adj_outcome say how each disagreement was decided. Carried posts show the reads of "
+            "the wave they were read in. Reproduces post_label by the merge rule. Built by "
+            "label_funnel.py reads.'"))
+    print(f"{len(r):,} posts -> journal.post_read")
+    print(r.groupby(["wave", "adj_outcome"]).size().unstack(fill_value=0).to_string())
+    for f in ANALYSIS:
+        print(f"{f}_by:", r[f"{f}_by"].value_counts().to_dict())
 
 
 def _place_key(s: str) -> str:
@@ -353,5 +475,5 @@ def report() -> None:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("step", choices=["merge", "build", "report"])
-    {"merge": merge, "build": build, "report": report}[ap.parse_args().step]()
+    ap.add_argument("step", choices=["merge", "reads", "build", "report"])
+    {"merge": merge, "reads": reads, "build": build, "report": report}[ap.parse_args().step]()

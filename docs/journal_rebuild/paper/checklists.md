@@ -66,6 +66,6 @@ justifications; generalizability paragraph.
    Agriculture, county population and the APHIS wild-bird file; the access date for reference 1.
 2. LLM model version identifiers and labelling dates.
 3. Public code link.
-4. Human validation results.
+4. Human validation results. (Done 2026-11-21: Results, "Human Validation", Table 4.)
 5. The TRIPOD+AI rows above are still from memory; replace with the official items.
 6. Compute cost of fitting and labelling is not reported anywhere.
