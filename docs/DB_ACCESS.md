@@ -32,9 +32,41 @@ Get the `h5n1_app` password from the **team password manager** — never git or 
 |---|---|
 | Instance connection name | `harvard-capstone-499102:us-central1:h5n1-pg` |
 | Project | `harvard-capstone-499102` |
-| Database | `h5n1` |
+| Database | `h5n1` (shared warehouse); `h5n1_journal` (journal rebuild, see below) |
 | DB user | `h5n1_app` |
 | Region | `us-central1` |
+
+### The second database: `h5n1_journal`
+
+The same instance holds a second database, `h5n1_journal`: a copy of Nick's local journal
+rebuild database, restored on 2026-11-23. It is a **separate database, not a schema in
+`h5n1`**, so a client connected to `h5n1` will not show it. Same proxy, host, port, user and
+password; only the database name changes.
+
+- **Schema `journal`:** the rebuild's own tables: `post` (every Facebook and X post, with
+  text), `post_funnel`, `post_label` (final label per post), `post_read` (both Sonnet reads
+  and the Opus adjudication side by side, with how each disagreement was decided),
+  `coding_key` (human-validation item `P001`–`P400` to `platform` + `post_id`),
+  `post_sentiment`, `post_tag`, `author_type`, `gdelt_state_day`, `state_week_extra`.
+- **Schema `public`:** copies of `h5n1.public` source tables plus the rebuilt baseline
+  chain. ⚠️ Several share a name with a **different** table in `h5n1.public`: in the rebuild,
+  `fact_wild_bird_detection`, `model_county_day_35` and `model_state_week` are dated by Date
+  Detected; the collection-dated versions are the `_coll` tables. Always check which
+  database you are in before comparing numbers.
+- **It is a snapshot.** It does not update when the local database changes; it is refreshed
+  by restoring a new dump. Treat it as read-only. The dump it came from is in
+  `gs://h5n1-social-restricted/journal/2026-11-23/db/`.
+- **It holds post text and author fields**, so the same restrictions as the social data
+  apply: never export its rows into the repo, a notebook output, or `gs://h5n1-raw`.
+
+In a GUI client, change the connection's database to `h5n1_journal` (or add a second
+connection). From Python, `get_engine()` reads `DB_NAME`, so set it before the first call:
+
+```python
+import os
+os.environ["DB_NAME"] = "h5n1_journal"
+from h5n1.db import get_engine
+```
 
 ---
 
@@ -99,7 +131,7 @@ the client create a Postgres connection to:
 |---|---|
 | Host | `127.0.0.1` |
 | Port | `5432` (or `5433` if you moved it) |
-| Database | `h5n1` |
+| Database | `h5n1` (or `h5n1_journal` for the journal rebuild) |
 | User / password | `h5n1_app` + password (or your IAM login — see below) |
 
 The GUI talks plain Postgres to localhost; the proxy carries the IAM-authenticated
